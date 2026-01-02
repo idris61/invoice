@@ -1,0 +1,955 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Lieferando Invoice - {{ doc.invoice_number }}</title>
+	<style>
+		@page {
+			size: A4;
+			margin: 10mm 12mm 12mm 12mm;
+		}
+		
+		body {
+			font-family: Arial, sans-serif;
+			font-size: 11pt;
+			line-height: 1.4;
+			color: #000;
+			margin: 0;
+			padding: 0;
+			background: #fff;
+			font-weight: 400;
+		}
+		
+		.page {
+			page-break-after: always;
+			position: relative;
+			min-height: 250mm;
+			display: flex;
+			flex-direction: column;
+		}
+		
+		.page:last-child {
+			page-break-after: avoid;
+			min-height: auto;
+		}
+		
+		.page-tips {
+			page-break-after: avoid;
+			min-height: auto;
+		}
+		
+		.tips-table-wrapper {
+			margin-top: 20px;
+		}
+		
+		/* Header Section */
+		.invoice-title {
+			font-size: 17pt;
+			font-weight: 600;
+			margin: 0 0 14px 0;
+			padding: 0;
+		}
+		
+		.invoice-header {
+			display: flex;
+			justify-content: space-between;
+			align-items: flex-start;
+			margin-bottom: 20px;
+		}
+		
+		.recipient-info {
+			flex: 1;
+			font-size: 11pt;
+			line-height: 1.35;
+		}
+		
+		.recipient-info .company-name,
+		.recipient-info .attention {
+			font-weight: normal;
+			font-size: 11pt;
+			margin-bottom: 1px;
+		}
+		
+		.recipient-info .address {
+			line-height: 1.5;
+			font-size: 11pt;
+		}
+		
+		.recipient-info .address-line {
+			display: block;
+			margin-bottom: 0;
+		}
+		
+		.logo-section {
+			text-align: right;
+			flex-shrink: 0;
+			margin-top: 4px;
+		}
+		
+		.cc-logo {
+			max-width: 155px;
+			max-height: 55px;
+			height: auto;
+			width: auto;
+			object-fit: contain;
+		}
+		
+		/* Invoice Details */
+		.invoice-details {
+			margin-bottom: 16px;
+			font-size: 11pt;
+		}
+		
+		.invoice-details-row {
+			margin-bottom: 4px;
+			line-height: 1.5;
+		}
+		
+		.invoice-details-label {
+			font-weight: normal;
+			display: inline-block;
+		}
+		
+		.invoice-details-value {
+			font-weight: normal;
+		}
+		
+		.invoice-details-inline {
+			display: grid;
+			grid-template-columns: 1fr 2fr 1fr;
+			margin-bottom: 4px;
+		}
+		
+		.invoice-details-inline > div:first-child {
+			grid-column: 1;
+			text-align: left;
+		}
+		
+		.invoice-details-inline > div:last-child {
+			grid-column: 2;
+			text-align: center;
+		}
+		
+		.invoice-details-inline-center {
+			text-align: center;
+		}
+		
+		/* Services Section */
+		.services-section {
+			margin-top: 12px;
+			margin-bottom: 10px;
+			font-size: 11pt;
+		}
+		
+		.services-intro {
+			margin-bottom: 10px;
+			font-weight: normal;
+			font-size: 11pt;
+			border-bottom: 1px solid #000;
+			padding-bottom: 6px;
+		}
+		
+		.service-item {
+			margin-bottom: 18px;
+		}
+		
+		.service-title {
+			font-weight: normal;
+			margin-bottom: 6px;
+			font-size: 11pt;
+			line-height: 1.5;
+		}
+		
+		.service-fee-row {
+			display: grid;
+			grid-template-columns: 1fr 18px 70px;
+			column-gap: 8px;
+			align-items: baseline;
+			margin-bottom: 0;
+			font-size: 11pt;
+			line-height: 1.5;
+		}
+		
+		.service-fee-row-underline {
+			position: relative;
+			padding-bottom: 1px;
+		}
+		
+		.service-fee-row-underline::after {
+			content: '';
+			position: absolute;
+			bottom: 0;
+			left: calc(100% - 18px - 70px - 8px);
+			right: 0;
+			border-bottom: 1px solid #000;
+		}
+		
+		.service-fee {
+			font-weight: normal;
+		}
+		
+		.service-euro {
+			text-align: right;
+			font-weight: normal;
+		}
+		
+		.service-amount {
+			font-weight: normal;
+			text-align: right;
+		}
+		
+		/* Amounts Summary */
+		.amounts-section {
+			margin-top: 8px;
+			margin-bottom: 0;
+			font-size: 11pt;
+		}
+		
+		.amount-row {
+			display: grid;
+			grid-template-columns: 1fr 18px 70px;
+			column-gap: 8px;
+			align-items: baseline;
+			margin-bottom: 4px;
+			line-height: 1.5;
+		}
+		
+		.amount-row-underline {
+			position: relative;
+			padding-bottom: 1px;
+		}
+		
+		.amount-row-underline::after {
+			content: '';
+			position: absolute;
+			bottom: 0;
+			left: calc(100% - 18px - 70px - 8px);
+			right: 0;
+			border-bottom: 1px solid #000;
+		}
+		
+		.amount-label {
+			font-weight: normal;
+			font-size: 11pt;
+			white-space: nowrap;
+		}
+		
+		.amount-euro,
+		.amount-value {
+			text-align: right;
+			font-weight: normal;
+			font-size: 11pt;
+		}
+		
+		.total-row {
+			padding-top: 6px;
+			margin-top: 6px;
+			font-size: 11pt;
+		}
+		
+		.total-row .amount-label,
+		.total-row .amount-euro,
+		.total-row .amount-value {
+			font-weight: normal;
+		}
+		
+		.outstanding-row {
+			padding: 6px 0;
+			margin-top: 6px;
+			margin-bottom: 6px;
+			font-weight: 700;
+			font-size: 11pt;
+			border-bottom: 1px solid #000;
+			padding-bottom: 6px;
+		}
+		
+		.outstanding-row .amount-label,
+		.outstanding-row .amount-euro,
+		.outstanding-row .amount-value {
+			font-weight: bold;
+		}
+		
+		/* Footer - Supplier Info */
+		.supplier-footer {
+			margin-top: auto;
+			padding-top: 10px;
+			border-top: 1px solid #000;
+			font-size: 8.5pt;
+			line-height: 1.4;
+			color: #333;
+			width: 100%;
+			box-sizing: border-box;
+		}
+		
+		.supplier-name {
+			font-weight: bold;
+			margin-bottom: 6px;
+			font-size: 9pt;
+		}
+		
+		.supplier-details {
+			display: grid;
+			grid-template-columns: 1.2fr 1.15fr 1.6fr 1fr;
+			column-gap: 10px;
+			line-height: 1.35;
+			font-size: 9pt;
+			width: 95%;
+			box-sizing: border-box;
+		}
+		
+		.supplier-details-column {
+			overflow-wrap: break-word;
+			word-wrap: break-word;
+			min-width: 0;
+		}
+		
+		.supplier-details-row {
+			margin-bottom: 2px;
+			word-break: break-word;
+			overflow-wrap: anywhere;
+		}
+		
+		/* Revenue Info */
+		.revenue-info {
+			margin-top: 14px;
+			margin-bottom: auto;
+			font-size: 11pt;
+			line-height: 1.5;
+		}
+		
+		/* Notes Section */
+		.notes-section {
+			margin-top: 20px;
+			font-size: 11pt;
+			line-height: 1.5;
+		}
+		
+		.notes-title {
+			font-weight: bold;
+			margin-bottom: 8px;
+		}
+		
+		.notes-content {
+			white-space: pre-wrap;
+		}
+		
+		/* Einzelauflistung Page */
+		.detail-title {
+			font-size: 17pt;
+			font-weight: 700;
+			margin-bottom: 10px;
+		}
+		
+		.page .invoice-header {
+			margin-bottom: 12px;
+		}
+		
+		.page .logo-section {
+			margin-top: 2px;
+		}
+		
+		.restaurant-name,
+		.period-info {
+			font-size: 11pt;
+			line-height: 1.35;
+			margin-bottom: 2px;
+		}
+		
+		.summary-section {
+			font-size: 11pt;
+			margin-bottom: 10px;
+		}
+		
+		.summary-row {
+			display: grid;
+			grid-template-columns: 160px 1fr;
+			column-gap: 160px;
+			margin-bottom: 4px;
+			line-height: 1.5;
+		}
+		
+		.section-divider {
+			border-top: 1px solid #000;
+			margin: 10px 0;
+		}
+		
+		.payout-section {
+			display: grid;
+			grid-template-columns: 1fr 18px 80px;
+			column-gap: 8px;
+			row-gap: 6px;
+			font-size: 11pt;
+			margin-bottom: 14px;
+			align-items: baseline;
+		}
+		
+		.payout-euro {
+			text-align: right;
+			font-weight: normal;
+		}
+		
+		.payout-amount {
+			text-align: right;
+			font-weight: normal;
+		}
+		
+		.payout-row-underline {
+			grid-column: 2 / 4;
+			display: grid;
+			grid-template-columns: 18px 80px;
+			column-gap: 8px;
+			border-bottom: 1px solid #000;
+			padding-bottom: 1px;
+		}
+		
+		.payout-row-underline .payout-euro {
+			text-align: right;
+		}
+		
+		.payout-row-underline .payout-amount {
+			text-align: right;
+		}
+		
+		.payout-amount.bold {
+			font-weight: 700;
+		}
+		
+		.payout-total-row {
+			grid-column: 1 / -1;
+			display: grid;
+			grid-template-columns: 1fr 18px 80px;
+			column-gap: 8px;
+			margin-top: 6px;
+		}
+		
+		/* Orders Table */
+		.orders-table,
+		.tips-table {
+			width: auto !important;
+			border-collapse: collapse !important;
+			border-spacing: 0 !important;
+			font-size: 9pt !important;
+			margin-top: 6px !important;
+			margin-left: 0 !important;
+			margin-right: auto !important;
+			line-height: 1.1 !important;
+		}
+		
+		.orders-table th,
+		.orders-table td,
+		.tips-table th,
+		.tips-table td {
+			border: none !important;
+			padding: 1px 4px !important;
+			font-size: 9pt !important;
+			line-height: 1.1 !important;
+			white-space: nowrap !important;
+		}
+		
+		.orders-table th,
+		.tips-table th {
+			text-align: left !important;
+			font-weight: 700 !important;
+			color: #000 !important;
+		}
+		
+		.orders-table th:first-child,
+		.orders-table td:first-child,
+		.tips-table th:first-child,
+		.tips-table td:first-child {
+			padding-right: 8px !important;
+		}
+		
+		.orders-table th:nth-child(2),
+		.orders-table td:nth-child(2),
+		.tips-table th:nth-child(2),
+		.tips-table td:nth-child(2) {
+			padding-right: 8px !important;
+		}
+		
+		.orders-table th:last-child,
+		.tips-table th:last-child {
+			text-align: right !important;
+		}
+		
+		.orders-table td:last-child,
+		.tips-table td:last-child {
+			text-align: left !important;
+		}
+		
+		.orders-table td.amount-with-star,
+		.tips-table td.amount-with-star {
+			text-align: right !important;
+		}
+		
+		.orders-table tr,
+		.orders-table thead,
+		.orders-table tbody,
+		.tips-table tr,
+		.tips-table thead,
+		.tips-table tbody {
+			border: none !important;
+		}
+		
+		.page-footnote {
+			margin-top: 16px;
+			padding-top: 16px;
+			border-top: 1px solid #000;
+			font-size: 8.5pt;
+			line-height: 1.35;
+			color: #000;
+		}
+		
+		/* Confirmation Section */
+		.confirmation-section {
+			margin-top: 14px;
+			margin-bottom: 14px;
+			font-size: 11pt;
+		}
+		
+		.confirmation-amount-row {
+			display: grid;
+			grid-template-columns: 1fr 18px 80px;
+			column-gap: 8px;
+			align-items: baseline;
+			margin-bottom: 10px;
+			line-height: 1.5;
+		}
+		
+		.confirmation-label {
+			font-weight: 700;
+			font-size: 11pt;
+			color: #d32f2f;
+		}
+		
+		.confirmation-euro {
+			text-align: right;
+			font-weight: 700;
+			font-size: 11pt;
+			color: #d32f2f;
+		}
+		
+		.confirmation-amount {
+			text-align: right;
+			font-weight: 700;
+			font-size: 11pt;
+			color: #d32f2f;
+		}
+		
+		.confirmation-message {
+			font-size: 11pt;
+			line-height: 1.5;
+			color: #000;
+			margin-top: 8px;
+		}
+		
+		/* Trinkgelder Page */
+		.tips-title {
+			font-size: 18pt;
+			font-weight: bold;
+			margin: 0 0 20px 0;
+			padding: 0;
+		}
+		
+		.tips-table-wrapper {
+			margin-top: 20px;
+		}
+	</style>
+</head>
+<body>
+{%- macro format_currency(amount) -%}
+	{%- if amount -%}
+		{%- set formatted = "{:,.2f}".format(amount) -%}
+		{{ formatted.replace(",", "X").replace(".", ",").replace("X", ".") }}
+	{%- else -%}
+		0,00
+	{%- endif -%}
+{%- endmacro -%}
+
+{%- macro format_iban(iban) -%}
+	{%- if iban -%}
+		{%- set cleaned = iban.replace(' ', '').replace('-', '') -%}
+		{%- if cleaned|length >= 22 -%}
+			{{ cleaned[:4] + ' ' + cleaned[4:8] + ' ' + cleaned[8:12] + ' ' + cleaned[12:16] + ' ' + cleaned[16:20] + ' ' + cleaned[20:] }}
+		{%- else -%}
+			{{ cleaned }}
+		{%- endif -%}
+	{%- else -%}
+		{{ '' }}
+	{%- endif -%}
+{%- endmacro -%}
+
+{%- macro render_logo() -%}
+	<img src="/files/logocc.png" alt="CC Culinary Logo" class="cc-logo" onerror="this.src='/files/culinary_collective_logo.png'; this.onerror=null;" />
+{%- endmacro -%}
+
+{%- macro render_address(address_text) -%}
+	{%- if address_text -%}
+		{%- set postal_code = '' -%}
+		{%- set city = '' -%}
+		{%- set country = 'Deutschland' -%}
+		{%- set address_lower = address_text.lower() -%}
+		{%- set lines = address_text.split('\n') -%}
+		{%- for line in lines -%}
+			{%- if line.strip() -%}
+				{%- set line_stripped = line.strip() -%}
+				{%- set words = line_stripped.split() -%}
+				{%- for word in words -%}
+					{%- if word|length == 5 and word[0] in '0123456789' and word[1] in '0123456789' and word[2] in '0123456789' and word[3] in '0123456789' and word[4] in '0123456789' -%}
+						{%- set postal_code = word -%}
+						{%- set city_line = line_stripped.replace(postal_code, '').strip() -%}
+						{%- if city_line and city_line != country -%}
+							{%- set city = city_line -%}
+						{%- endif -%}
+					{%- endif -%}
+				{%- endfor -%}
+			{%- endif -%}
+		{%- endfor -%}
+		{%- if '/' in address_text -%}
+			{%- set parts = address_text.split('/') -%}
+			{%- if parts|length >= 2 -%}
+				<div class="supplier-details-row">{{ parts[0].strip() }} /</div>
+				{%- set second_part = parts[1].strip() -%}
+				{%- if postal_code and postal_code in second_part -%}
+					{%- set before_postal = second_part.split(postal_code)[0].strip() -%}
+					{%- set after_postal = second_part.split(postal_code)[1].strip() -%}
+					{%- if before_postal -%}
+						<div class="supplier-details-row">{{ before_postal }}</div>
+					{%- endif -%}
+					<div class="supplier-details-row">{{ postal_code }}{% if city %} {{ city }}{% else %}{{ after_postal.split(country)[0].strip() if country in after_postal else after_postal }}{% endif %}</div>
+					{%- if country not in second_part -%}
+						<div class="supplier-details-row">{{ country }}</div>
+					{%- endif -%}
+				{%- elif city and city in second_part and not postal_code -%}
+					{%- set before_city = second_part.split(city)[0].strip() -%}
+					{%- set after_city = second_part.split(city)[1].strip() -%}
+					{%- if before_city -%}
+						<div class="supplier-details-row">{{ before_city }}</div>
+					{%- endif -%}
+					<div class="supplier-details-row">{% if postal_code %}{{ postal_code }} {% endif %}{{ city }}</div>
+					{%- if after_city and country not in after_city -%}
+						<div class="supplier-details-row">{{ after_city }}</div>
+					{%- endif -%}
+					{%- if country not in second_part -%}
+						<div class="supplier-details-row">{{ country }}</div>
+					{%- endif -%}
+				{%- else -%}
+					<div class="supplier-details-row">{{ second_part }}</div>
+					{%- if parts|length > 2 -%}
+						{%- for part in parts[2:] -%}
+							{%- if part.strip() -%}
+								<div class="supplier-details-row">{{ part.strip() }}</div>
+							{%- endif -%}
+						{%- endfor -%}
+					{%- endif -%}
+					{%- if country not in address_text -%}
+						<div class="supplier-details-row">{{ country }}</div>
+					{%- endif -%}
+				{%- endif -%}
+			{%- else -%}
+				{%- for part in parts -%}
+					{%- if part.strip() -%}
+						<div class="supplier-details-row">{{ part.strip() }}{% if not loop.last %} /{% endif %}</div>
+					{%- endif -%}
+				{%- endfor -%}
+			{%- endif -%}
+		{%- elif '\n' in address_text -%}
+			{%- for line in address_text.split('\n') -%}
+				{%- if line.strip() -%}
+					<div class="supplier-details-row">{{ line.strip() }}</div>
+				{%- endif -%}
+			{%- endfor -%}
+		{%- else -%}
+			<div class="supplier-details-row">{{ address_text }}</div>
+		{%- endif -%}
+	{%- endif -%}
+{%- endmacro -%}
+
+	<!-- PAGE 1: Rechnung (Invoice) -->
+	<div class="page">
+		<div class="invoice-title">Rechnung</div>
+		
+		<div class="invoice-header">
+			<div class="recipient-info">
+				<div class="company-name">{{ doc.customer_company }}</div>
+				<div class="attention">z.Hd. {{ doc.restaurant_name }}</div>
+				<div class="address">
+					{% if doc.restaurant_address %}
+						{% for line in doc.restaurant_address.split('\n') %}
+							{% if line.strip() %}
+								<span class="address-line">{{ line.strip() }}</span>
+							{% endif %}
+						{% endfor %}
+					{% endif %}
+				</div>
+			</div>
+			<div class="logo-section">
+				{{ render_logo() }}
+			</div>
+		</div>
+		
+		<div class="invoice-details">
+			<div class="invoice-details-row">
+				<span class="invoice-details-label">Kundennummer:</span>
+				<span class="invoice-details-value">{{ doc.customer_number }}</span>
+			</div>
+			<div class="invoice-details-inline">
+				<div>
+					<span class="invoice-details-label">Datum:</span>
+					<span class="invoice-details-value">{{ frappe.utils.format_date(doc.invoice_date, "dd-MM-yyyy") }}</span>
+				</div>
+				<div class="invoice-details-inline-center">
+					<span class="invoice-details-label">Rechnungsnummer:</span>
+					<span class="invoice-details-value">{{ doc.invoice_number }}</span>
+				</div>
+			</div>
+		</div>
+		
+		<div class="services-section">
+			<div class="services-intro">Folgende Leistungen stellen wir Ihnen in Rechnung:</div>
+			
+			<div class="service-item">
+				<div class="service-title">Lieferando.de ({{ frappe.utils.format_date(doc.period_start, "dd-MM-yyyy") }} bis einschließlich {{ frappe.utils.format_date(doc.period_end, "dd-MM-yyyy") }}): {{ doc.total_orders }} Bestellungen im Wert von € {{ format_currency(doc.total_revenue) }}</div>
+				<div class="service-fee-row">
+					<span class="service-fee">Servicegebühr: {{ "{:,.2f}".format(doc.service_fee_rate).replace(".", ",") }}% von € {{ format_currency(doc.total_revenue) }}</span>
+					<span class="service-euro">€</span>
+					<span class="service-amount">{{ format_currency(doc.service_fee_amount) }}</span>
+				</div>
+			</div>
+			
+			<div class="service-item">
+				<div class="service-title">Verwaltungsgebühr (Online-Zahlungen) ({{ frappe.utils.format_date(doc.period_start, "dd-MM-yyyy") }} bis einschließlich {{ frappe.utils.format_date(doc.period_end, "dd-MM-yyyy") }}): {{ doc.online_paid_orders }} Bestellungen im Wert von € {{ format_currency(doc.online_paid_amount) }}</div>
+				<div class="service-fee-row service-fee-row-underline">
+					<span class="service-fee">Servicegebühr: € {{ format_currency(doc.admin_fee_rate) }} x {{ doc.online_paid_orders }}</span>
+					<span class="service-euro">€</span>
+					<span class="service-amount">{{ format_currency(doc.admin_fee_amount) }}</span>
+				</div>
+			</div>
+		</div>
+		
+		<div class="amounts-section">
+			<div class="amount-row">
+				<span class="amount-label">Zwischensumme:</span>
+				<span class="amount-euro">€</span>
+				<span class="amount-value">{{ format_currency(doc.subtotal) }}</span>
+			</div>
+			<div class="amount-row amount-row-underline">
+				<span class="amount-label">MwSt. ({{ "{:,.1f}".format(doc.tax_rate).replace(".", ",") }}% von € {{ format_currency(doc.subtotal) }}):</span>
+				<span class="amount-euro">€</span>
+				<span class="amount-value">{{ format_currency(doc.tax_amount) }}</span>
+			</div>
+			<div class="amount-row total-row">
+				<span class="amount-label">Gesamtbetrag dieser Rechnung:</span>
+				<span class="amount-euro">€</span>
+				<span class="amount-value">{{ format_currency(doc.total_amount) }}</span>
+			</div>
+			<div class="amount-row amount-row-underline">
+				<span class="amount-label">Verrechnet mit eingegangenen Onlinebezahlungen:</span>
+				<span class="amount-euro">€</span>
+				<span class="amount-value">{{ format_currency(doc.paid_online_payments) }}</span>
+			</div>
+			<div class="amount-row outstanding-row">
+				<span class="amount-label">Offener Rechnungsbetrag:</span>
+				<span class="amount-euro">€</span>
+				<span class="amount-value">{{ format_currency(doc.outstanding_amount) }}</span>
+			</div>
+		</div>
+		
+		{% if doc.notes %}
+		<div class="notes-section">
+			<div class="notes-title">Hinweise:</div>
+			<div class="notes-content">{{ doc.notes }}</div>
+		</div>
+		{% endif %}
+		
+		<div class="revenue-info">
+			<div>Ihr Umsatz in der Zeit vom {{ frappe.utils.format_date(doc.period_start, "dd-MM-yyyy") }} bis einschließlich {{ frappe.utils.format_date(doc.period_end, "dd-MM-yyyy") }}: € {{ format_currency(doc.total_revenue) }}.</div>
+		</div>
+		
+		<div class="supplier-footer">
+			<div class="supplier-name">{{ doc.supplier_name }}</div>
+			<div class="supplier-details">
+				<div class="supplier-details-column">
+					{{ render_address(doc.supplier_address) }}
+				</div>
+				<div class="supplier-details-column">
+					<div class="supplier-details-row">Geschäftsführer:</div>
+					{% if doc.supplier_geschäftsführer %}
+						{% for part in doc.supplier_geschäftsführer.split(',') %}
+							<div class="supplier-details-row">{{ part.strip() }}</div>
+						{% endfor %}
+					{% endif %}
+					<div class="supplier-details-row">{{ doc.supplier_email }}</div>
+					<div class="supplier-details-row">T: {{ doc.supplier_phone }}</div>
+				</div>
+				<div class="supplier-details-column">
+					<div class="supplier-details-row">{{ doc.supplier_bank_name }}</div>
+					{% if doc.supplier_iban %}
+						<div class="supplier-details-row">IBAN: {{ format_iban(doc.supplier_iban) }}</div>
+					{% else %}
+						<div class="supplier-details-row">IBAN: </div>
+					{% endif %}
+				</div>
+				<div class="supplier-details-column">
+					<div class="supplier-details-row">{{ doc.supplier_amtsgericht }}</div>
+					<div class="supplier-details-row">HRB: {{ doc.supplier_hrb }}</div>
+					<div class="supplier-details-row">USt.-IdNr.: {{ doc.supplier_ust_idnr }}</div>
+				</div>
+			</div>
+		</div>
+	</div>
+	
+	<!-- PAGE 2: Einzelauflistung (Detailed Listing) -->
+	<div class="page">
+		<div class="detail-title">Einzelauflistung</div>
+		
+		<div class="invoice-header">
+			<div class="recipient-info">
+				<div class="restaurant-name">Restaurant: {{ doc.restaurant_name }} ({{ doc.customer_number }})</div>
+				<div class="period-info">Zeitraum: {{ frappe.utils.format_date(doc.period_start, "dd-MM-yyyy") }} bis einschl. {{ frappe.utils.format_date(doc.period_end, "dd-MM-yyyy") }}</div>
+			</div>
+			<div class="logo-section">
+				{{ render_logo() }}
+			</div>
+		</div>
+		
+		<div class="summary-section">
+			<div class="summary-row">
+				<div>Gesamt</div>
+				<div>{{ doc.total_orders }} Bestellungen im Wert von € {{ format_currency(doc.total_revenue) }}</div>
+			</div>
+			{% if doc.cash_paid_orders and doc.cash_paid_orders > 0 %}
+			<div class="summary-row">
+				<div>Bei Auslieferung bezahlt</div>
+				<div>{{ doc.cash_paid_orders }} Bestellungen im Wert von € {{ format_currency(doc.cash_paid_amount) }}</div>
+			</div>
+			{% endif %}
+			<div class="summary-row">
+				<div>Online bezahlt *</div>
+				<div>{{ doc.online_paid_orders }} Bestellungen im Wert von € {{ format_currency(doc.online_paid_amount) }}</div>
+			</div>
+			{% if doc.stamp_card_amount and doc.stamp_card_amount > 0 %}
+			<div class="summary-row">
+				<div style="white-space: nowrap;">davon mit Stempelkarte bezahlt **</div>
+				<div>1 Bestellung im Wert von € {{ format_currency(doc.stamp_card_amount) }}</div>
+			</div>
+			{% endif %}
+			{% if doc.tips_amount and doc.tips_amount > 0 %}
+			<div class="summary-row">
+				<div>Trinkgelder</div>
+				<div>{% if doc.tip_items and doc.tip_items|length > 0 %}{{ doc.tip_items|length }}{% else %}1{% endif %} Bestellung{% if doc.tip_items and doc.tip_items|length > 1 %}en{% endif %} im Wert von € {{ format_currency(doc.tips_amount) }}</div>
+			</div>
+			{% endif %}
+		</div>
+		
+		<div class="section-divider"></div>
+		
+		<div class="payout-section">
+			<div>Ausstehende Onlinebezahlungen am {{ frappe.utils.format_date(doc.ausstehende_am_datum, "dd-MM-yyyy") }} **</div>
+			<div class="payout-row-underline">
+				<div class="payout-euro">€</div>
+				<div class="payout-amount">{{ format_currency(doc.ausstehende_onlinebezahlungen_betrag) }}</div>
+			</div>
+			
+			<div>Rechnungsausgleich {{ doc.invoice_number }}</div>
+			<div class="payout-row-underline">
+				<div class="payout-euro">€</div>
+				<div class="payout-amount">{{ format_currency(doc.rechnungsausgleich_betrag) }}</div>
+			</div>
+		</div>
+		
+		{% if doc.auszahlung_gesamt and doc.auszahlung_gesamt != 0 and doc.customer_bank_iban %}
+		<div class="payout-total-row">
+			<div>Auszahlung auf das Bankkonto {{ doc.customer_bank_iban }} z.Hd. {{ doc.customer_company }}</div>
+			<div class="payout-euro">€</div>
+			<div class="payout-amount bold">{{ format_currency(doc.auszahlung_gesamt) }}</div>
+		</div>
+		{% endif %}
+		
+		{% if doc.zu_begleichender_betrag and doc.zu_begleichender_betrag != 0 %}
+		<div class="confirmation-section">
+			<div class="confirmation-amount-row">
+				<span class="confirmation-label">Zu begleichender Betrag:</span>
+				<span class="confirmation-euro">€</span>
+				<span class="confirmation-amount">{{ format_currency(doc.zu_begleichender_betrag) }}</span>
+			</div>
+			{% if doc.confirmation_code_message %}
+			<div class="confirmation-message">
+				{{ doc.confirmation_code_message }}
+			</div>
+			{% elif doc.confirmation_payment_date %}
+			<div class="confirmation-message">
+				Am {{ frappe.utils.format_date(doc.confirmation_payment_date, "dd-MM-yyyy") }} wurde an Sie eine einmalige Auszahlung überwiesen. Diese Überweisung enthielt im Überweisungszweck einen Bestätigungscode. Bitte tragen Sie diesen in Ihrem Restaurant Portal unter dem Menüpunkt "Mein Restaurant", dann "Rechnungsadresse" unten ein, um Ihr Kundenkonto zu bestätigen. Nach erfolgreicher Bestätigung können weitere Auszahlungen an Sie vorgenommen werden.
+			</div>
+			{% endif %}
+		</div>
+		{% endif %}
+		
+		{% if doc.order_items and doc.order_items|length > 0 %}
+		<table class="orders-table">
+			<thead>
+				<tr>
+					<th>Datum</th>
+					<th>#</th>
+					<th>€</th>
+				</tr>
+			</thead>
+			<tbody>
+				{% for item in doc.order_items %}
+				<tr>
+					<td>{{ frappe.utils.format_datetime(item.order_date, "dd-MM-yyyy, HH:mm:ss") if item.order_date else '' }}</td>
+					<td>{{ item.order_id }}</td>
+					<td{% if item.is_online %} class="amount-with-star"{% endif %}>{{ format_currency(item.amount) }}{% if item.is_online %} *{% endif %}</td>
+				</tr>
+				{% endfor %}
+			</tbody>
+		</table>
+		{% endif %}
+		
+		<div class="page-footnote">
+			** Der ausstehende Kontostand besteht aus sämtlichen erhaltenen Onlinezahlungen abzüglich der Rückerstattungen, Einzahlungen für den Ausgleich von Rechnungen, sowie Auszahlungen. Diese Informationen finden Sie unter https://restaurants.takeaway.com/
+		</div>
+	</div>
+	
+	<!-- PAGE 3: Trinkgelder (Tips) -->
+	{% if doc.tips_amount and doc.tips_amount > 0 %}
+	<div class="page page-tips">
+		<div class="tips-title">Trinkgelder</div>
+		
+		<div class="invoice-header">
+			<div class="recipient-info">
+				<div class="restaurant-name">Restaurant: {{ doc.restaurant_name }} ({{ doc.customer_number }})</div>
+				<div class="period-info">Trinkgelder erhalten von {{ frappe.utils.format_date(doc.period_start, "dd-MM-yyyy") }} bis einschl. {{ frappe.utils.format_date(doc.period_end, "dd-MM-yyyy") }}</div>
+			</div>
+			<div class="logo-section">
+				{{ render_logo() }}
+			</div>
+		</div>
+		
+		{% if doc.tip_items and doc.tip_items|length > 0 %}
+		<div class="tips-table-wrapper">
+			<table class="tips-table">
+				<thead>
+					<tr>
+						<th>Datum</th>
+						<th>#</th>
+						<th>€</th>
+					</tr>
+				</thead>
+				<tbody>
+					{% for item in doc.tip_items %}
+					<tr>
+						<td>{{ frappe.utils.format_datetime(item.tip_date, "dd-MM-yyyy, HH:mm:ss") if item.tip_date else '' }}</td>
+						<td>{{ item.tip_id }}</td>
+						<td>{{ format_currency(item.amount) }}</td>
+					</tr>
+					{% endfor %}
+				</tbody>
+			</table>
+		</div>
+		{% endif %}
+	</div>
+	{% endif %}
+</body>
+</html>

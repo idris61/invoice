@@ -1,0 +1,540 @@
+{
+ "actions": [],
+ "autoname": "naming_series:",
+ "creation": "2025-12-31 14:06:59.109715",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "naming_series",
+  "lieferando_invoice",
+  "general_info_section",
+  "restaurant_name",
+  "customer_number",
+  "invoice_number",
+  "col_break_general_1",
+  "period_start",
+  "period_end",
+  "customer_tax_number",
+  "custom_section_break_58ypn",
+  "total_revenue",
+  "online_paid_amount",
+  "cash_paid_amount",
+  "chargeback_amount",
+  "cash_service_fee_amount",
+  "custom_column_break_tcltn",
+  "total_orders",
+  "online_paid_orders",
+  "cash_paid_orders",
+  "chargeback_orders",
+  "custom_section_break_fzoso",
+  "net_revenue",
+  "custom_column_break_ec5q9",
+  "pending_online_payments_g",
+  "restaurant_calculations_section",
+  "custom_lieferando_komisyon_hesaplama",
+  "service_fee_rate",
+  "service_fee_amount",
+  "management_fee",
+  "additional_service_fee",
+  "subtotal_c",
+  "vat_amount_d",
+  "total_invoice_amount_e",
+  "col_break_commissions",
+  "culinary_service_fee_rate",
+  "culinary_service_fee_amount",
+  "culinary_service_fee_vat",
+  "culinary_total_commission",
+  "culinary_account_fee",
+  "culinary_commission_profit",
+  "payment_section",
+  "payment_to_restaurant_h",
+  "tips_section",
+  "tips_amount",
+  "stamp_card_amount",
+  "notes_section",
+  "notes",
+  "invoice_data_json_section",
+  "invoice_data_json",
+  "reference_service_fee_rate",
+  "reference_service_fee_amount",
+  "reference_subtotal",
+  "reference_vat_amount",
+  "reference_total_invoice_amount"
+ ],
+ "fields": [
+  {
+   "default": "LIA-",
+   "fieldname": "naming_series",
+   "fieldtype": "Data",
+   "label": "Naming Series"
+  },
+  {
+   "description": "Analiz edilecek Lieferando Faturası seçin",
+   "fieldname": "lieferando_invoice",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Lieferando Invoice",
+   "options": "Lieferando Invoice",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "general_info_section",
+   "fieldtype": "Section Break",
+   "label": "General Information"
+  },
+  {
+   "bold": 1,
+   "fetch_from": "lieferando_invoice.restaurant_name",
+   "fieldname": "restaurant_name",
+   "fieldtype": "Data",
+   "label": "Restaurant Name",
+   "read_only": 1
+  },
+  {
+   "bold": 1,
+   "fetch_from": "lieferando_invoice.customer_number",
+   "fieldname": "customer_number",
+   "fieldtype": "Data",
+   "label": "Customer Number",
+   "read_only": 1
+  },
+  {
+   "bold": 1,
+   "fetch_from": "lieferando_invoice.invoice_number",
+   "fieldname": "invoice_number",
+   "fieldtype": "Data",
+   "label": "Invoice Number",
+   "read_only": 1
+  },
+  {
+   "fieldname": "col_break_general_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "bold": 1,
+   "fetch_from": "lieferando_invoice.period_start",
+   "fieldname": "period_start",
+   "fieldtype": "Date",
+   "label": "Period Start",
+   "read_only": 1
+  },
+  {
+   "bold": 1,
+   "fetch_from": "lieferando_invoice.period_end",
+   "fieldname": "period_end",
+   "fieldtype": "Date",
+   "label": "Period End",
+   "read_only": 1
+  },
+  {
+   "bold": 1,
+   "fetch_from": "lieferando_invoice.customer_tax_number",
+   "fieldname": "customer_tax_number",
+   "fieldtype": "Data",
+   "label": "Tax Number (Steuernummer)",
+   "read_only": 1
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "custom_section_break_58ypn",
+   "fieldtype": "Section Break",
+   "label": "Order Details"
+  },
+  {
+   "bold": 1,
+   "fetch_from": "lieferando_invoice.total_revenue",
+   "fieldname": "total_revenue",
+   "fieldtype": "Currency",
+   "label": "Total Revenue (\u20ac)",
+   "precision": "2",
+   "read_only": 1
+  },
+  {
+   "bold": 1,
+   "fetch_from": "lieferando_invoice.online_paid_amount",
+   "fieldname": "online_paid_amount",
+   "fieldtype": "Currency",
+   "label": "Online Paid Amount (\u20ac)",
+   "precision": "2",
+   "read_only": 1
+  },
+  {
+   "bold": 1,
+   "fetch_from": "lieferando_invoice.cash_paid_amount",
+   "fieldname": "cash_paid_amount",
+   "fieldtype": "Currency",
+   "label": "Cash Paid Amount (\u20ac)",
+   "precision": "2",
+   "read_only": 1
+  },
+  {
+   "bold": 1,
+   "fetch_from": "lieferando_invoice.chargeback_amount",
+   "fieldname": "chargeback_amount",
+   "fieldtype": "Currency",
+   "label": "Chargeback Amount (\u20ac)",
+   "precision": "2",
+   "read_only": 1
+  },
+  {
+   "bold": 1,
+   "fetch_from": "lieferando_invoice.cash_service_fee_amount",
+   "fieldname": "cash_service_fee_amount",
+   "fieldtype": "Currency",
+   "label": "Cash Service Fee Amount (\u20ac)",
+   "precision": "2",
+   "read_only": 1
+  },
+  {
+   "fieldname": "custom_column_break_tcltn",
+   "fieldtype": "Column Break"
+  },
+  {
+   "bold": 1,
+   "fetch_from": "lieferando_invoice.total_orders",
+   "fieldname": "total_orders",
+   "fieldtype": "Int",
+   "label": "Total Orders",
+   "read_only": 1
+  },
+  {
+   "bold": 1,
+   "fetch_from": "lieferando_invoice.online_paid_orders",
+   "fieldname": "online_paid_orders",
+   "fieldtype": "Int",
+   "label": "Online Paid Orders",
+   "read_only": 1
+  },
+  {
+   "bold": 1,
+   "fetch_from": "lieferando_invoice.cash_paid_orders",
+   "fieldname": "cash_paid_orders",
+   "fieldtype": "Int",
+   "label": "Cash Paid Orders",
+   "read_only": 1
+  },
+  {
+   "bold": 1,
+   "fetch_from": "lieferando_invoice.chargeback_orders",
+   "fieldname": "chargeback_orders",
+   "fieldtype": "Int",
+   "label": "Chargeback Orders",
+   "read_only": 1
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "custom_section_break_fzoso",
+   "fieldtype": "Section Break",
+   "label": "Net Revenue & Pending Online Payments"
+  },
+  {
+   "bold": 1,
+   "description": "Net Revenue = Total Revenue - Chargeback Amount. Displayed for information only. Commission calculations are based on Total Revenue (without deducting chargeback)",
+   "fieldname": "net_revenue",
+   "fieldtype": "Currency",
+   "label": "Net Revenue (\u20ac)",
+   "precision": "2",
+   "read_only": 1
+  },
+  {
+   "fieldname": "custom_column_break_ec5q9",
+   "fieldtype": "Column Break"
+  },
+  {
+   "bold": 1,
+   "description": "Cumulative balance of pending online payments from Lieferando. This value is extracted from the original invoice PDF and used to calculate the payment to restaurant. (Previous periods' balance + current period's online payments + tips - refunds - invoice settlements - payments made)",
+   "fieldname": "pending_online_payments_g",
+   "fieldtype": "Currency",
+   "label": "Pending Online Payments",
+   "precision": "2",
+   "read_only": 1
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "restaurant_calculations_section",
+   "fieldtype": "Section Break",
+   "label": "Commission Calculation"
+  },
+  {
+   "fieldname": "custom_lieferando_komisyon_hesaplama",
+   "fieldtype": "Column Break",
+   "label": "Lieferando Commission Calculation"
+  },
+  {
+   "bold": 1,
+   "description": "Commission rate from Lieferando Invoice (can be manually changed)",
+   "fieldname": "service_fee_rate",
+   "fieldtype": "Percent",
+   "label": "Service Commission Rate (%)",
+   "precision": "2"
+  },
+  {
+   "bold": 1,
+   "description": "Total Revenue \u00d7 Commission Rate",
+   "fieldname": "service_fee_amount",
+   "fieldtype": "Currency",
+   "label": "Service Fee Amount (\u20ac)",
+   "precision": "2",
+   "read_only": 1
+  },
+  {
+   "bold": 1,
+   "description": "Online Orders Count \u00d7 \u20ac0.64",
+   "fieldname": "management_fee",
+   "fieldtype": "Currency",
+   "label": "Management Fee",
+   "precision": "2",
+   "read_only": 1
+  },
+  {
+   "bold": 1,
+   "description": "Cash Payment Service Fee Amount (Cash Paid Amount \u00d7 1.95%) (\u2248 2%)",
+   "fieldname": "additional_service_fee",
+   "fieldtype": "Currency",
+   "label": "Additional Service Fee",
+   "precision": "2",
+   "read_only": 1
+  },
+  {
+   "bold": 1,
+   "description": "Total Commission (Net) = Service Fee + Management Fee + Additional Service Fee",
+   "fieldname": "subtotal_c",
+   "fieldtype": "Currency",
+   "label": "Subtotal",
+   "precision": "2",
+   "read_only": 1
+  },
+  {
+   "bold": 1,
+   "description": "Subtotal \u00d7 19%",
+   "fieldname": "vat_amount_d",
+   "fieldtype": "Currency",
+   "label": "VAT",
+   "precision": "2",
+   "read_only": 1
+  },
+  {
+   "bold": 1,
+   "description": "Total Commission + VAT",
+   "fieldname": "total_invoice_amount_e",
+   "fieldtype": "Currency",
+   "label": "Lieferando Total Invoice Amount",
+   "precision": "2",
+   "read_only": 1
+  },
+  {
+   "fieldname": "col_break_commissions",
+   "fieldtype": "Column Break",
+   "label": "Culinary Commission Calculation"
+  },
+  {
+   "bold": 1,
+   "description": "Culinary Service Commission Rate = Reference Rate - Lieferando Commission Rate",
+   "fieldname": "culinary_service_fee_rate",
+   "fieldtype": "Percent",
+   "label": "Culinary Service Commission Rate",
+   "precision": "2",
+   "read_only": 1
+  },
+  {
+   "bold": 1,
+   "description": "Total Revenue \u00d7 Culinary Service Commission Rate",
+   "fieldname": "culinary_service_fee_amount",
+   "fieldtype": "Currency",
+   "label": "Culinary Commission Amount",
+   "precision": "2",
+   "read_only": 1
+  },
+  {
+   "bold": 1,
+   "description": "Culinary Commission Amount \u00d7 19%",
+   "fieldname": "culinary_service_fee_vat",
+   "fieldtype": "Currency",
+   "label": "Culinary Commission VAT",
+   "precision": "2",
+   "read_only": 1
+  },
+  {
+   "bold": 1,
+   "description": "Culinary Commission Amount + Culinary Commission VAT",
+   "fieldname": "culinary_total_commission",
+   "fieldtype": "Currency",
+   "label": "Culinary Total Commission (VAT Included)",
+   "precision": "2",
+   "read_only": 1
+  },
+  {
+   "bold": 1,
+   "default": "0.35",
+   "description": "Fixed account fee (can be manually changed)",
+   "fieldname": "culinary_account_fee",
+   "fieldtype": "Currency",
+   "label": "Culinary Account Fee",
+   "precision": "2"
+  },
+  {
+   "bold": 1,
+   "fieldname": "culinary_commission_profit",
+   "fieldtype": "Currency",
+   "label": "Culinary Total Invoice Amount",
+   "precision": "2",
+   "read_only": 1
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "payment_section",
+   "fieldtype": "Section Break",
+   "label": "Payment to Restaurant"
+  },
+  {
+   "bold": 1,
+   "description": "Pending Online Payments - Lieferando Total Invoice Amount - Culinary Total Invoice Amount",
+   "fieldname": "payment_to_restaurant_h",
+   "fieldtype": "Currency",
+   "label": "Payment to Restaurant",
+   "precision": "2",
+   "read_only": 1
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "tips_section",
+   "fieldtype": "Section Break",
+   "label": "Tips"
+  },
+  {
+   "bold": 1,
+   "description": "Tips amount is already included in Pending Online Payments and is not used separately in calculations",
+   "fieldname": "tips_amount",
+   "fieldtype": "Currency",
+   "label": "Tips Amount (\u20ac)",
+   "precision": "2",
+   "read_only": 1
+  },
+  {
+   "description": "M\u00fc\u015fterilerin Lieferando'nun sadakat program\u0131 arac\u0131l\u0131\u011f\u0131yla kazand\u0131\u011f\u0131 \u00fccretsiz sipari\u015fler. Bekleyen Online \u00d6demeler i\u00e7inde zaten dahildir ve hesaplamalarda ayr\u0131ca kullan\u0131lmaz.",
+   "fetch_from": "lieferando_invoice.stamp_card_amount",
+   "fieldname": "stamp_card_amount",
+   "fieldtype": "Currency",
+   "label": "Loyalty Program Amount (\u20ac)",
+   "precision": "2",
+   "read_only": 1
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "notes_section",
+   "fieldtype": "Section Break",
+   "label": "Notes"
+  },
+  {
+   "bold": 1,
+   "fieldname": "notes",
+   "fieldtype": "Text Editor",
+   "label": "Notes"
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "invoice_data_json_section",
+   "fieldtype": "Section Break",
+   "label": "Invoice Data (JSON)"
+  },
+  {
+   "description": "Complete Lieferando Invoice data in JSON format (for print format use)",
+   "fieldname": "invoice_data_json",
+   "fieldtype": "Code",
+   "label": "Invoice Data JSON",
+   "options": "JSON",
+   "read_only": 1
+  },
+  {
+   "bold": 1,
+   "description": "Reference commission rate (12% or 30%) used for invoice print format",
+   "fieldname": "reference_service_fee_rate",
+   "fieldtype": "Percent",
+   "label": "Reference Service Fee Rate (%)",
+   "precision": "2",
+   "read_only": 1
+  },
+  {
+   "bold": 1,
+   "description": "Service fee calculated with reference rate (for print format)",
+   "fieldname": "reference_service_fee_amount",
+   "fieldtype": "Currency",
+   "label": "Reference Service Fee Amount (\u20ac)",
+   "precision": "2",
+   "read_only": 1
+  },
+  {
+   "bold": 1,
+   "description": "Subtotal calculated with reference rate (for print format)",
+   "fieldname": "reference_subtotal",
+   "fieldtype": "Currency",
+   "label": "Reference Subtotal (\u20ac)",
+   "precision": "2",
+   "read_only": 1
+  },
+  {
+   "bold": 1,
+   "description": "VAT calculated with reference rate (for print format)",
+   "fieldname": "reference_vat_amount",
+   "fieldtype": "Currency",
+   "label": "Reference VAT Amount (\u20ac)",
+   "precision": "2",
+   "read_only": 1
+  },
+  {
+   "bold": 1,
+   "description": "Total invoice amount calculated with reference rate (for print format)",
+   "fieldname": "reference_total_invoice_amount",
+   "fieldtype": "Currency",
+   "label": "Reference Total Invoice Amount (\u20ac)",
+   "precision": "2",
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-01-02 20:57:22.789100",
+ "modified_by": "Administrator",
+ "module": "invoice",
+ "name": "Lieferando Invoice Analysis",
+ "naming_rule": "By \"Naming Series\" field",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Accounts Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Accounts User",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

@@ -29,12 +29,20 @@
   "col_break_3",
   "customer_company",
   "customer_bank_iban",
+  "customer_tax_number",
   "orders_section",
   "total_orders",
   "total_revenue",
   "col_break_4",
   "online_paid_orders",
   "online_paid_amount",
+  "cash_paid_orders",
+  "cash_paid_amount",
+  "chargeback_orders",
+  "chargeback_amount",
+  "cash_service_fee_amount",
+  "stamp_card_orders",
+  "stamp_card_amount",
   "fees_section",
   "service_fee_rate",
   "service_fee_amount",
@@ -225,6 +233,14 @@
   "label": "Payout IBAN"
   },
   {
+   "description": "Steuernummer (Tax Number)",
+   "fieldname": "customer_tax_number",
+   "fieldtype": "Data",
+   "hidden": 0,
+   "label": "Tax Number (Steuernummer)",
+   "permlevel": 0
+  },
+  {
    "fieldname": "orders_section",
    "fieldtype": "Section Break",
   "label": "Orders"
@@ -257,6 +273,68 @@
    "fieldname": "online_paid_amount",
    "fieldtype": "Currency",
   "label": "Online Paid Amount",
+   "precision": "2"
+  },
+  {
+   "default": "0",
+   "fieldname": "cash_paid_orders",
+   "fieldtype": "Int",
+   "hidden": 0,
+   "label": "Cash Paid Orders",
+   "permlevel": 0
+  },
+  {
+   "default": "0",
+   "fieldname": "cash_paid_amount",
+   "fieldtype": "Currency",
+   "hidden": 0,
+   "label": "Cash Paid Amount",
+   "permlevel": 0,
+   "precision": "2"
+  },
+  {
+   "default": "0",
+   "fieldname": "chargeback_orders",
+   "fieldtype": "Int",
+   "hidden": 0,
+   "label": "Chargeback Orders",
+   "permlevel": 0
+  },
+  {
+   "default": "0",
+   "fieldname": "chargeback_amount",
+   "fieldtype": "Currency",
+   "hidden": 0,
+   "label": "Chargeback Amount",
+   "permlevel": 0,
+   "precision": "2"
+  },
+  {
+   "default": "0",
+   "fieldname": "cash_service_fee_amount",
+   "fieldtype": "Currency",
+   "hidden": 0,
+   "label": "Cash Service Fee Amount",
+   "permlevel": 0,
+   "precision": "2"
+  },
+  {
+   "default": "0",
+   "description": "Stempelkarte (Loyalty Program) sipariş sayısı",
+   "fieldname": "stamp_card_orders",
+   "fieldtype": "Int",
+   "hidden": 0,
+   "label": "Stamp Card Orders",
+   "permlevel": 0
+  },
+  {
+   "default": "0",
+   "description": "Stempelkarte (Loyalty Program) tutarı",
+   "fieldname": "stamp_card_amount",
+   "fieldtype": "Currency",
+   "hidden": 0,
+   "label": "Stamp Card Amount",
+   "permlevel": 0,
    "precision": "2"
   },
   {

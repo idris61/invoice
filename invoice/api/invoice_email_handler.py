@@ -3,6 +3,11 @@ import re
 import json
 from datetime import datetime
 
+try:
+    import PyPDF2
+except ImportError:
+    PyPDF2 = None
+
 logger = frappe.logger("invoice.email_handler", allow_site=frappe.local.site)
 
 def process_invoice_email(doc, method=None):
@@ -365,7 +370,9 @@ def create_wolt_invoice_doc(communication_doc, pdf_attachment, extracted_data):
 def check_pdf_has_uber_eats_header(pdf_attachment):
     """PDF içinde 'Bestell- und Zahlungsübersicht' başlığı var mı kontrol et (UberEats faturaları için)"""
     try:
-        import PyPDF2
+        if PyPDF2 is None:
+            logger.warning("PyPDF2 modülü yüklü değil")
+            return False
         
         file_doc = frappe.get_doc("File", pdf_attachment.name)
         file_path = file_doc.get_full_path()
@@ -395,7 +402,9 @@ def check_pdf_has_uber_eats_header(pdf_attachment):
 def check_pdf_has_selbstfakturierung(pdf_attachment):
     """PDF içinde 'Rechnung(Selbstfakturierung)' başlığı var mı kontrol et (Wolt faturaları için)"""
     try:
-        import PyPDF2
+        if PyPDF2 is None:
+            logger.warning("PyPDF2 modülü yüklü değil")
+            return False
         
         file_doc = frappe.get_doc("File", pdf_attachment.name)
         file_path = file_doc.get_full_path()
@@ -426,7 +435,9 @@ def check_pdf_has_selbstfakturierung(pdf_attachment):
 def check_pdf_has_wolt_netting_report(pdf_attachment):
     """PDF içinde 'Übersicht Umsätze und Auszahlungen' başlığı var mı kontrol et (Wolt netting raporu)"""
     try:
-        import PyPDF2
+        if PyPDF2 is None:
+            logger.warning("PyPDF2 modülü yüklü değil")
+            return False
         
         file_doc = frappe.get_doc("File", pdf_attachment.name)
         file_path = file_doc.get_full_path()
@@ -452,7 +463,9 @@ def check_pdf_has_wolt_netting_report(pdf_attachment):
 def extract_invoice_data_from_pdf(pdf_attachment):
     """PDF'den fatura verilerini çıkar"""
     try:
-        import PyPDF2
+        if PyPDF2 is None:
+            logger.warning("PyPDF2 modülü yüklü değil")
+            return {"raw_text": "", "confidence": 0}
         
         file_doc = frappe.get_doc("File", pdf_attachment.name)
         file_path = file_doc.get_full_path()
@@ -773,7 +786,9 @@ def extract_lieferando_fields(full_text: str) -> dict:
 def handle_wolt_netting_report(communication_doc, pdf_attachment):
     """Wolt netting raporunu ilgili Wolt Invoice kaydına ekle"""
     try:
-        import PyPDF2
+        if PyPDF2 is None:
+            logger.warning("PyPDF2 modülü yüklü değil")
+            return
         
         file_doc = frappe.get_doc("File", pdf_attachment.name)
         file_path = file_doc.get_full_path()

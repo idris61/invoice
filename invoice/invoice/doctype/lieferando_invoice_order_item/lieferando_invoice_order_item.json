@@ -1,0 +1,62 @@
+{
+ "actions": [],
+ "creation": "2025-12-25 16:00:00",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "order_date",
+  "order_id",
+  "amount",
+  "is_online"
+ ],
+ "fields": [
+  {
+   "fieldname": "order_date",
+   "fieldtype": "Datetime",
+   "in_list_view": 1,
+   "label": "Date",
+   "reqd": 1,
+   "width": "30%"
+  },
+  {
+   "fieldname": "order_id",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "#",
+   "reqd": 1,
+   "width": "20%"
+  },
+  {
+   "fieldname": "amount",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "label": "\u20ac",
+   "precision": "2",
+   "reqd": 1,
+   "width": "25%"
+  },
+  {
+   "default": "0",
+   "fieldname": "is_online",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Online Order",
+   "width": "25%"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-01-01 17:16:11.527906",
+ "modified_by": "Administrator",
+ "module": "invoice",
+ "name": "Lieferando Invoice Order Item",
+ "owner": "Administrator",
+ "permissions": [],
+ "row_format": "Dynamic",
+ "sort_field": "idx",
+ "sort_order": "ASC",
+ "states": [],
+ "track_changes": 1
+}
