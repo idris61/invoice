@@ -1,0 +1,460 @@
+{
+ "actions": [],
+ "autoname": "field:invoice_number",
+ "creation": "2025-11-25 12:00:00",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "invoice_section",
+  "invoice_number",
+  "invoice_date",
+  "tax_date",
+  "period_start",
+  "col_break_period",
+  "period_end",
+  "status",
+  "supplier_section",
+  "supplier_name",
+  "supplier_vat",
+  "supplier_address",
+  "customer_section",
+  "restaurant_name",
+  "customer_company",
+  "restaurant_address",
+  "col_break_customer",
+  "business_id",
+  "customer_vat",
+  "tax_number",
+  "orders_section",
+  "total_orders",
+  "total_order_value",
+  "gross_revenue_after_discounts",
+  "col_break_orders",
+  "commission_own_delivery",
+  "commission_pickup",
+  "fees_section",
+  "uber_eats_fee",
+  "vat_19_percent",
+  "col_break_fees",
+  "cash_collected",
+  "total_payout",
+  "amounts_section",
+  "net_amount",
+  "vat_amount",
+  "col_break_amounts",
+  "total_amount",
+  "metadata_section",
+  "pdf_file",
+  "email_subject",
+  "email_from",
+  "col_break_metadata",
+  "received_date",
+  "processed_date",
+  "extraction_confidence",
+  "raw_text",
+  "ai_validation_section",
+  "ai_validation_status",
+  "ai_validation_summary",
+  "col_break_ai",
+  "ai_validation_date",
+  "ai_validation_confidence",
+  "ai_validation_result",
+  "notes_section",
+  "notes",
+  "amended_from"
+ ],
+ "fields": [
+  {
+   "fieldname": "invoice_section",
+   "fieldtype": "Section Break",
+  "label": "Invoice"
+  },
+  {
+   "fieldname": "invoice_number",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+  "label": "Invoice Number",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "invoice_date",
+   "fieldtype": "Date",
+  "label": "Invoice Date",
+   "reqd": 1
+  },
+  {
+   "fieldname": "tax_date",
+   "fieldtype": "Date",
+  "label": "Tax Date"
+  },
+  {
+   "fieldname": "period_start",
+   "fieldtype": "Date",
+  "label": "Period Start"
+  },
+  {
+   "fieldname": "col_break_period",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "period_end",
+   "fieldtype": "Date",
+  "label": "Period End"
+  },
+  {
+   "default": "Draft",
+   "fieldname": "status",
+   "fieldtype": "Select",
+  "label": "Status",
+   "options": "Draft\nSubmitted\nCancelled"
+  },
+  {
+   "fieldname": "supplier_section",
+   "fieldtype": "Section Break",
+   "label": "Uber Eats"
+  },
+  {
+   "fieldname": "supplier_name",
+   "fieldtype": "Data",
+  "label": "Company",
+   "default": "Uber Eats Germany GmbH"
+  },
+  {
+   "fieldname": "supplier_vat",
+   "fieldtype": "Data",
+  "label": "VAT ID"
+  },
+  {
+   "fieldname": "supplier_address",
+   "fieldtype": "Small Text",
+  "label": "Address"
+  },
+  {
+   "fieldname": "customer_section",
+   "fieldtype": "Section Break",
+  "label": "Restaurant"
+  },
+  {
+   "fieldname": "restaurant_name",
+   "fieldtype": "Data",
+  "label": "Restaurant Name"
+  },
+  {
+   "fieldname": "customer_company",
+   "fieldtype": "Data",
+  "label": "Customer Company"
+  },
+  {
+   "fieldname": "restaurant_address",
+   "fieldtype": "Small Text",
+  "label": "Address"
+  },
+  {
+   "fieldname": "col_break_customer",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "business_id",
+   "fieldtype": "Data",
+  "label": "Commercial Register Number"
+  },
+  {
+   "fieldname": "customer_vat",
+   "fieldtype": "Data",
+  "label": "Customer VAT ID"
+  },
+  {
+   "fieldname": "tax_number",
+   "fieldtype": "Data",
+  "label": "Tax Number"
+  },
+  {
+   "fieldname": "orders_section",
+   "fieldtype": "Section Break",
+  "label": "Orders"
+  },
+  {
+   "fieldname": "total_orders",
+   "fieldtype": "Int",
+  "label": "Total Orders",
+   "read_only": 1
+  },
+  {
+   "fieldname": "total_order_value",
+   "fieldtype": "Currency",
+  "label": "Total Order Value",
+   "precision": "2",
+   "read_only": 1
+  },
+  {
+   "fieldname": "gross_revenue_after_discounts",
+   "fieldtype": "Currency",
+  "label": "Gross Revenue After Discounts",
+   "precision": "2",
+   "read_only": 1
+  },
+  {
+   "fieldname": "col_break_orders",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "commission_own_delivery",
+   "fieldtype": "Currency",
+  "label": "Commission (Own Delivery)",
+   "precision": "2",
+   "read_only": 1
+  },
+  {
+   "fieldname": "commission_pickup",
+   "fieldtype": "Currency",
+  "label": "Commission (Pickup)",
+   "precision": "2",
+   "read_only": 1
+  },
+  {
+   "fieldname": "fees_section",
+   "fieldtype": "Section Break",
+  "label": "Fees"
+  },
+  {
+   "fieldname": "uber_eats_fee",
+   "fieldtype": "Currency",
+  "label": "Uber Eats Fee",
+   "precision": "2",
+   "read_only": 1
+  },
+  {
+   "fieldname": "vat_19_percent",
+   "fieldtype": "Currency",
+  "label": "VAT (19%)",
+   "precision": "2",
+   "read_only": 1
+  },
+  {
+   "fieldname": "col_break_fees",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "cash_collected",
+   "fieldtype": "Currency",
+  "label": "Cash Collected",
+   "precision": "2",
+   "read_only": 1
+  },
+  {
+   "bold": 1,
+   "fieldname": "total_payout",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+  "label": "Total Payout",
+   "precision": "2",
+   "read_only": 1
+  },
+  {
+   "fieldname": "amounts_section",
+   "fieldtype": "Section Break",
+  "label": "Invoice Amounts"
+  },
+  {
+   "fieldname": "net_amount",
+   "fieldtype": "Currency",
+  "label": "Net Amount",
+   "precision": "2",
+   "read_only": 1
+  },
+  {
+   "fieldname": "vat_amount",
+   "fieldtype": "Currency",
+  "label": "VAT Amount (19%)",
+   "precision": "2",
+   "read_only": 1
+  },
+  {
+   "fieldname": "col_break_amounts",
+   "fieldtype": "Column Break"
+  },
+  {
+   "bold": 1,
+   "fieldname": "total_amount",
+   "fieldtype": "Currency",
+  "label": "Total Amount",
+   "precision": "2",
+   "read_only": 1
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "metadata_section",
+   "fieldtype": "Section Break",
+  "label": "Source"
+  },
+  {
+   "fieldname": "pdf_file",
+   "fieldtype": "Attach",
+   "label": "PDF"
+  },
+  {
+   "fieldname": "email_subject",
+   "fieldtype": "Data",
+   "label": "Email Subject",
+   "read_only": 1
+  },
+  {
+   "fieldname": "email_from",
+   "fieldtype": "Data",
+   "label": "Email From",
+   "read_only": 1
+  },
+  {
+   "fieldname": "col_break_metadata",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "received_date",
+   "fieldtype": "Datetime",
+   "label": "Received",
+   "read_only": 1
+  },
+  {
+   "fieldname": "processed_date",
+   "fieldtype": "Datetime",
+   "label": "Processed",
+   "read_only": 1
+  },
+  {
+   "fieldname": "extraction_confidence",
+   "fieldtype": "Int",
+   "label": "Confidence",
+   "read_only": 1
+  },
+  {
+   "fieldname": "raw_text",
+   "fieldtype": "Long Text",
+  "label": "Raw Text",
+   "read_only": 1
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "ai_validation_section",
+   "fieldtype": "Section Break",
+   "label": "AI Validation"
+  },
+  {
+   "default": "Not Checked",
+   "fieldname": "ai_validation_status",
+   "fieldtype": "Select",
+   "label": "Validation Status",
+   "options": "Not Checked\nValid\nIssues Found\nError",
+   "read_only": 1
+  },
+  {
+   "fieldname": "ai_validation_summary",
+   "fieldtype": "Small Text",
+   "label": "Summary",
+   "read_only": 1
+  },
+  {
+   "fieldname": "col_break_ai",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "ai_validation_date",
+   "fieldtype": "Datetime",
+   "label": "Last Validated",
+   "read_only": 1
+  },
+  {
+   "fieldname": "ai_validation_confidence",
+   "fieldtype": "Percent",
+   "in_list_view": 1,
+   "label": "AI Score",
+   "read_only": 1
+  },
+  {
+   "fieldname": "ai_validation_result",
+   "fieldtype": "Long Text",
+   "label": "Full Validation Result (JSON)",
+   "read_only": 1
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "notes_section",
+   "fieldtype": "Section Break",
+  "label": "Notes"
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Text Editor",
+  "label": "Remarks"
+  },
+  {
+   "fieldname": "amended_from",
+   "fieldtype": "Link",
+   "label": "Amended From",
+   "no_copy": 1,
+   "options": "Uber Eats Invoice",
+   "print_hide": 1,
+   "read_only": 1
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "is_submittable": 1,
+ "links": [],
+ "modified": "2025-11-25 20:15:04.837488",
+ "modified_by": "Administrator",
+ "module": "invoice",
+ "name": "Uber Eats Invoice",
+ "naming_rule": "By fieldname",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "amend": 1,
+   "cancel": 1,
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "submit": 1,
+   "write": 1
+  },
+  {
+   "cancel": 1,
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Accounts Manager",
+   "share": 1,
+   "submit": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Accounts User",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}
+
