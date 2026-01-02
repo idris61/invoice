@@ -1,0 +1,411 @@
+name: Rollback Frappe Deployment (Production - invoice)
+
+on:
+  workflow_dispatch:
+    inputs:
+      rollback_target:
+        description: 'Rollback target'
+        required: true
+        type: choice
+        options:
+          - 'Previous commit'
+          - 'Specific commit'
+          - 'Last successful deployment'
+      commit_sha:
+        description: 'Specific commit SHA (only if "Specific commit" selected)'
+        required: false
+        type: string
+      skip_build:
+        description: 'Skip build step (faster but risky)'
+        required: false
+        type: boolean
+        default: false
+      reason:
+        description: 'Rollback reason (required)'
+        required: true
+        type: string
+
+jobs:
+  rollback:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for rollback
+
+      - name: Validate inputs
+        run: |
+          echo "🔍 Validating rollback inputs..."
+          echo "Target: ${{ github.event.inputs.rollback_target }}"
+          echo "Commit SHA: ${{ github.event.inputs.commit_sha }}"
+          echo "Skip build: ${{ github.event.inputs.skip_build }}"
+          echo "Reason: ${{ github.event.inputs.reason }}"
+          
+          if [ "${{ github.event.inputs.rollback_target }}" == "Specific commit" ] && [ -z "${{ github.event.inputs.commit_sha }}" ]; then
+            echo "❌ ERROR: Commit SHA required when rolling back to specific commit"
+            exit 1
+          fi
+
+      - name: Notify rollback started
+        env:
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+        run: |
+          curl -X POST "$SLACK_WEBHOOK" \
+            -H 'Content-Type: application/json' \
+            -d "{
+              \"attachments\": [{
+                \"color\": \"warning\",
+                \"title\": \"⏪ Frappe Production Rollback Started (invoice)\",
+                \"fields\": [
+                  {\"title\": \"Environment\", \"value\": \"🏭 Production\", \"short\": true},
+                  {\"title\": \"Target\", \"value\": \"${{ github.event.inputs.rollback_target }}\", \"short\": true},
+                  {\"title\": \"Reason\", \"value\": \"${{ github.event.inputs.reason }}\", \"short\": false},
+                  {\"title\": \"Triggered by\", \"value\": \"${{ github.actor }}\", \"short\": true}
+                ],
+                \"ts\": $(date +%s)
+              }]
+            }"
+
+      - name: Perform rollback
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.CULLINAR_ERP_EC2_HOST }}
+          username: ubuntu
+          key: ${{ secrets.CULLINAR_ERP_EC2_SSH_KEY }}
+          port: 22
+          command_timeout: 30m
+          script: |
+            #!/bin/bash
+            set -e
+            set -o pipefail
+
+            # Redirect output
+            exec > >(tee -a /home/ubuntu/rollback-prod.log)
+            exec 2>&1
+
+            echo "==========================================="
+            echo "⏪ Starting Frappe Production Rollback"
+            echo "==========================================="
+            echo "🏭 Environment: Production"
+            echo "📅 Date: $(date)"
+            echo "🎯 Target: ${{ github.event.inputs.rollback_target }}"
+            echo "📝 Reason: ${{ github.event.inputs.reason }}"
+            echo "👤 User: ${{ github.actor }}"
+            echo ""
+
+            # Lock
+            LOCK_FILE="/tmp/frappe_rollback_prod.lock"
+            exec 9>"$LOCK_FILE"
+            
+            if ! flock -n 9; then
+              echo "❌ Another rollback/deployment is running"
+              exit 1
+            fi
+            
+            echo "✅ Lock acquired"
+
+            cleanup() {
+              flock -u 9 2>/dev/null || true
+              exit $?
+            }
+            
+            trap cleanup EXIT INT TERM
+
+            # Backup before rollback
+            echo ""
+            echo "💾 Creating Pre-Rollback Backup"
+            echo "-----------------------------------"
+            
+            BENCH_DIR="/home/ubuntu/frappe-bench"
+            APP_DIR="$BENCH_DIR/apps/invoice"
+            BACKUP_DIR="/home/ubuntu/backups/frappe-prod"
+            TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+            
+            mkdir -p "$BACKUP_DIR"
+            
+            cd "$APP_DIR"
+            
+            # Save current state
+            CURRENT_COMMIT=$(git rev-parse HEAD)
+            CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+            
+            echo "📌 Current commit: $CURRENT_COMMIT"
+            echo "🌿 Current branch: $CURRENT_BRANCH"
+            
+            # Create state file
+            cat > "$BACKUP_DIR/state_before_rollback_$TIMESTAMP.txt" << EOF
+            Environment: Production
+            Rollback Date: $(date)
+            Current Commit: $CURRENT_COMMIT
+            Current Branch: $CURRENT_BRANCH
+            Rollback Target: ${{ github.event.inputs.rollback_target }}
+            Target Commit: ${{ github.event.inputs.commit_sha }}
+            Reason: ${{ github.event.inputs.reason }}
+            Triggered By: ${{ github.actor }}
+            EOF
+            
+            echo "✅ State saved: $BACKUP_DIR/state_before_rollback_$TIMESTAMP.txt"
+
+            # Database backup
+            echo ""
+            echo "🗄️  Creating Database Backup"
+            echo "-----------------------------------"
+            
+            cd "$BENCH_DIR"
+            
+            if bench --site all backup --with-files 2>&1; then
+              echo "✅ Database backup completed"
+              
+              LATEST_BACKUP=$(find sites/*/private/backups -name "*.sql.gz" -type f -printf '%T@ %p\n' | sort -n | tail -1 | cut -f2- -d" ")
+              if [ -n "$LATEST_BACKUP" ]; then
+                cp "$LATEST_BACKUP" "$BACKUP_DIR/db_backup_$TIMESTAMP.sql.gz"
+                echo "📦 Backup copied to: $BACKUP_DIR/db_backup_$TIMESTAMP.sql.gz"
+              fi
+            else
+              echo "⚠️  Database backup failed, but continuing..."
+            fi
+
+            # Determine target commit
+            echo ""
+            echo "🎯 Determining Target Commit"
+            echo "-----------------------------------"
+            
+            cd "$APP_DIR"
+            
+            case "${{ github.event.inputs.rollback_target }}" in
+              "Previous commit")
+                TARGET_COMMIT=$(git rev-parse HEAD~1)
+                echo "📍 Rolling back to previous commit: $TARGET_COMMIT"
+                ;;
+                
+              "Specific commit")
+                if [ -z "${{ github.event.inputs.commit_sha }}" ]; then
+                  echo "❌ No commit SHA provided"
+                  exit 1
+                fi
+                
+                if ! git cat-file -e "${{ github.event.inputs.commit_sha }}^{commit}" 2>/dev/null; then
+                  echo "❌ Invalid commit SHA: ${{ github.event.inputs.commit_sha }}"
+                  exit 1
+                fi
+                
+                TARGET_COMMIT="${{ github.event.inputs.commit_sha }}"
+                echo "📍 Rolling back to specified commit: $TARGET_COMMIT"
+                ;;
+                
+              "Last successful deployment")
+                LAST_SUCCESS=$(git tag -l "deploy-prod-success-*" | sort -r | head -1)
+                
+                if [ -n "$LAST_SUCCESS" ]; then
+                  TARGET_COMMIT=$(git rev-list -n 1 "$LAST_SUCCESS")
+                  echo "📍 Rolling back to last successful: $TARGET_COMMIT ($LAST_SUCCESS)"
+                else
+                  echo "⚠️  No successful deployment tag found, using previous commit"
+                  TARGET_COMMIT=$(git rev-parse HEAD~1)
+                fi
+                ;;
+                
+              *)
+                echo "❌ Unknown rollback target: ${{ github.event.inputs.rollback_target }}"
+                exit 1
+                ;;
+            esac
+            
+            echo "✅ Target commit: $TARGET_COMMIT"
+            echo ""
+            echo "📝 Target commit details:"
+            git log -1 --pretty=format:"Author: %an <%ae>%nDate: %ad%nMessage: %s%n" "$TARGET_COMMIT"
+
+            # Confirmation
+            echo ""
+            echo "⚠️  ROLLBACK CONFIRMATION"
+            echo "-----------------------------------"
+            echo "FROM: $CURRENT_COMMIT"
+            echo "TO:   $TARGET_COMMIT"
+            echo ""
+            
+            COMMITS_TO_ROLLBACK=$(git rev-list --count "$TARGET_COMMIT..$CURRENT_COMMIT")
+            echo "📊 Rolling back $COMMITS_TO_ROLLBACK commit(s)"
+
+            # Stop services
+            echo ""
+            echo "🛑 Stopping Frappe Services"
+            echo "-----------------------------------"
+            
+            cd "$BENCH_DIR"
+            
+            sudo supervisorctl stop frappe-bench-web:* 2>&1 || true
+            sudo supervisorctl stop frappe-bench-workers:* 2>&1 || true
+            
+            sleep 3
+            echo "✅ Services stopped"
+
+            # Git rollback
+            echo ""
+            echo "🔄 Performing Git Rollback"
+            echo "-----------------------------------"
+            
+            cd "$APP_DIR"
+            
+            # Stash uncommitted changes
+            if ! git diff-index --quiet HEAD --; then
+              echo "💾 Stashing uncommitted changes..."
+              git stash save "pre-rollback-stash-$TIMESTAMP"
+            fi
+            
+            # Checkout target
+            echo "🔀 Checking out commit: $TARGET_COMMIT"
+            if ! git checkout "$TARGET_COMMIT" 2>&1; then
+              echo "❌ Failed to checkout target commit"
+              exit 1
+            fi
+            
+            echo "✅ Git rollback completed"
+            echo "Current HEAD:"
+            git log -1 --oneline
+
+            # Build
+            cd "$BENCH_DIR"
+            
+            if [ "${{ github.event.inputs.skip_build }}" == "true" ]; then
+              echo ""
+              echo "⏭️  Skipping build (as requested)"
+            else
+              echo ""
+              echo "🏗️  Building Assets"
+              echo "-----------------------------------"
+              
+              if timeout 10m bench build --app invoice 2>&1; then
+                echo "✅ Build completed"
+              else
+                echo "❌ Build failed"
+                echo "⚠️  Attempting to restore previous state..."
+                
+                cd "$APP_DIR"
+                git checkout "$CURRENT_COMMIT"
+                
+                echo "❌ Rollback aborted - restored to previous state"
+                exit 1
+              fi
+            fi
+
+            # Clear cache
+            echo ""
+            echo "🧹 Clearing Cache"
+            echo "-----------------------------------"
+            
+            bench --site all clear-cache 2>&1 || echo "⚠️  Cache clear warning"
+
+            # Restart services
+            echo ""
+            echo "🔁 Restarting Services"
+            echo "-----------------------------------"
+            
+            sudo supervisorctl start frappe-bench-web:* 2>&1
+            sudo supervisorctl start frappe-bench-workers:* 2>&1
+            
+            sleep 5
+            
+            echo ""
+            echo "📊 Supervisor Status:"
+            sudo supervisorctl status
+
+            # Health check
+            echo ""
+            echo "🏥 Health Check"
+            echo "-----------------------------------"
+            
+            sleep 5
+            
+            if sudo supervisorctl status | grep -qE "BACKOFF|FATAL|EXITED"; then
+              echo "❌ Some services failed to start:"
+              sudo supervisorctl status | grep -E "BACKOFF|FATAL|EXITED" || true
+              
+              echo ""
+              echo "⚠️  ROLLBACK PARTIALLY FAILED"
+              echo "Manual intervention required"
+              
+              exit 1
+            fi
+            
+            RUNNING_COUNT=$(sudo supervisorctl status | grep -c "RUNNING" || echo "0")
+            echo "✅ Services running: $RUNNING_COUNT"
+
+            # Create rollback marker
+            echo ""
+            echo "🏷️  Creating Rollback Marker"
+            echo "-----------------------------------"
+            
+            cd "$APP_DIR"
+            
+            git tag -a "rollback-prod-$TIMESTAMP" -m "Production rollback to $TARGET_COMMIT - Reason: ${{ github.event.inputs.reason }}"
+            
+            echo "✅ Tag created: rollback-prod-$TIMESTAMP"
+
+            # Summary
+            echo ""
+            echo "==========================================="
+            echo "✅ Production Rollback Completed Successfully"
+            echo "==========================================="
+            echo "🏭 Environment: Production"
+            echo "📅 Completed at: $(date)"
+            echo "🔙 Rolled back from: $CURRENT_COMMIT"
+            echo "📍 Rolled back to: $TARGET_COMMIT"
+            echo "💾 Backup location: $BACKUP_DIR"
+            echo "🏷️  Rollback tag: rollback-prod-$TIMESTAMP"
+            echo ""
+            echo "⚠️  IMPORTANT NOTES:"
+            echo "1. Database migrations were NOT rolled back"
+            echo "2. If issues persist, restore from backup:"
+            echo "   bench --site all restore $BACKUP_DIR/db_backup_$TIMESTAMP.sql.gz"
+            echo "==========================================="
+
+      - name: Upload rollback logs
+        if: always()
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.CULLINAR_ERP_EC2_HOST }}
+          username: ubuntu
+          key: ${{ secrets.CULLINAR_ERP_EC2_SSH_KEY }}
+          script: |
+            if [ -f /home/ubuntu/rollback-prod.log ]; then
+              echo "📄 Production Rollback log (last 100 lines):"
+              tail -100 /home/ubuntu/rollback-prod.log
+            fi
+
+      - name: Notify Slack
+        if: always()
+        env:
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+        run: |
+          if [ "${{ job.status }}" == "success" ]; then
+            STATUS_EMOJI=":white_check_mark:"
+            STATUS_TEXT="SUCCESS"
+            COLOR="good"
+          else
+            STATUS_EMOJI=":x:"
+            STATUS_TEXT="FAILED"
+            COLOR="danger"
+          fi
+          
+          curl -X POST "$SLACK_WEBHOOK" \
+            -H 'Content-Type: application/json' \
+            -d "{
+              \"attachments\": [{
+                \"color\": \"$COLOR\",
+                \"title\": \"$STATUS_EMOJI Frappe Production Rollback $STATUS_TEXT (invoice)\",
+                \"fields\": [
+                  {\"title\": \"Environment\", \"value\": \"🏭 Production\", \"short\": true},
+                  {\"title\": \"Target\", \"value\": \"${{ github.event.inputs.rollback_target }}\", \"short\": true},
+                  {\"title\": \"Commit\", \"value\": \"${{ github.event.inputs.commit_sha }}\", \"short\": true},
+                  {\"title\": \"Reason\", \"value\": \"${{ github.event.inputs.reason }}\", \"short\": false},
+                  {\"title\": \"Triggered by\", \"value\": \"${{ github.actor }}\", \"short\": true}
+                ],
+                \"footer\": \"Frappe Rollback System\",
+                \"ts\": $(date +%s)
+              }]
+            }"

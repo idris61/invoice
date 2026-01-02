@@ -1,0 +1,649 @@
+name: Deploy Frappe to EC2 (Production - invoice)
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Full history for rollback and tagging
+
+      - name: Pre-deployment Health Check
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.CULLINAR_ERP_EC2_HOST }}
+          username: ubuntu
+          key: ${{ secrets.CULLINAR_ERP_EC2_SSH_KEY }}
+          script: |
+            #!/bin/bash
+            set -e
+            echo "============================================"
+            echo "🏥 Pre-Deployment Health Check (Production)"
+            echo "============================================"
+
+            BENCH_DIR="/home/ubuntu/frappe-bench"
+
+            # Check if Redis configs exist
+            if [ ! -f "$BENCH_DIR/config/redis_cache.conf" ] || [ ! -f "$BENCH_DIR/config/redis_queue.conf" ]; then
+              echo "⚠️  Redis config missing, creating..."
+              cd "$BENCH_DIR" || exit 1
+              bench setup redis
+              bench setup supervisor --yes
+              sudo supervisorctl reread
+              sudo supervisorctl update
+            fi
+
+            # Stop system Redis to prevent conflicts
+            if systemctl is-active --quiet redis 2>/dev/null || systemctl is-active --quiet redis-server 2>/dev/null; then
+              echo "⚠️  Stopping system Redis to prevent conflicts..."
+              sudo systemctl stop redis 2>/dev/null || true
+              sudo systemctl stop redis-server 2>/dev/null || true
+              sudo systemctl disable redis 2>/dev/null || true
+              sudo systemctl disable redis-server 2>/dev/null || true
+            fi
+
+            # Check Redis status
+            echo ""
+            echo "📊 Current Redis status:"
+            REDIS_STATUS=$(sudo supervisorctl status 2>&1 | grep redis || echo "No Redis processes")
+            echo "$REDIS_STATUS"
+
+            # If Redis is FATAL, try to fix
+            if echo "$REDIS_STATUS" | grep -qE "FATAL|STOPPED|EXITED"; then
+              echo ""
+              echo "⚠️  Redis not healthy, attempting fix..."
+
+              sudo killall redis-server 2>/dev/null || true
+              sleep 2
+
+              cd "$BENCH_DIR"
+              bench setup redis
+              bench setup supervisor --yes
+              sudo supervisorctl reread
+              sudo supervisorctl update
+              sudo supervisorctl start frappe-bench-redis:* 2>/dev/null || true
+
+              sleep 5
+
+              echo ""
+              echo "📊 Redis status after fix:"
+              sudo supervisorctl status | grep redis
+
+              if sudo supervisorctl status | grep redis | grep -qE "FATAL|STOPPED"; then
+                echo ""
+                echo "❌ Redis fix failed! Check logs:"
+                sudo tail -20 /var/log/supervisor/frappe-bench-redis-*.log 2>/dev/null || echo "No logs available"
+                exit 1
+              else
+                echo "✅ Redis is now healthy"
+              fi
+            else
+              echo "✅ Redis is healthy"
+            fi
+
+            # Test Redis connectivity
+            echo ""
+            echo "🧪 Testing Redis connectivity..."
+            CACHE_PORT=$(grep "^port" "$BENCH_DIR/config/redis_cache.conf" | awk '{print $2}' 2>/dev/null || echo "13000")
+            QUEUE_PORT=$(grep "^port" "$BENCH_DIR/config/redis_queue.conf" | awk '{print $2}' 2>/dev/null || echo "11000")
+
+            if redis-cli -p "$CACHE_PORT" ping 2>/dev/null | grep -q PONG; then
+              echo "✅ Redis cache ($CACHE_PORT) responding"
+            else
+              echo "❌ Redis cache ($CACHE_PORT) NOT responding"
+              exit 1
+            fi
+
+            if redis-cli -p "$QUEUE_PORT" ping 2>/dev/null | grep -q PONG; then
+              echo "✅ Redis queue ($QUEUE_PORT) responding"
+            else
+              echo "❌ Redis queue ($QUEUE_PORT) NOT responding"
+              exit 1
+            fi
+
+            echo ""
+            echo "============================================"
+            echo "✅ Pre-Deployment Health Check Passed"
+            echo "============================================"
+
+      - name: Deploy to EC2
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          GITHUB_BRANCH: ${{ github.ref_name }}
+          GITHUB_ACTOR: ${{ github.actor }}
+          GITHUB_SHA: ${{ github.sha }}
+          ENVIRONMENT: production
+        with:
+          host: ${{ secrets.CULLINAR_ERP_EC2_HOST }}
+          username: ubuntu
+          key: ${{ secrets.CULLINAR_ERP_EC2_SSH_KEY }}
+          port: 22
+          command_timeout: 45m
+          envs: GITHUB_BRANCH,GITHUB_ACTOR,GITHUB_SHA,ENVIRONMENT
+          script: |
+            #!/bin/bash
+            # DO NOT use set -e - we handle errors manually for better control
+            set -o pipefail
+
+            # Redirect all output to both console and log file
+            exec > >(tee -a /home/ubuntu/deploy-prod.log)
+            exec 2>&1
+
+            echo "==================================="
+            echo "🚀 Starting Frappe Deployment"
+            echo "🏭 Environment: ${ENVIRONMENT}"
+            echo "📅 Date: $(date)"
+            echo "👤 User: $(whoami)"
+            echo "🌿 Branch: ${GITHUB_BRANCH}"
+            echo "👤 Triggered by: ${GITHUB_ACTOR}"
+            echo "📌 Commit: ${GITHUB_SHA}"
+            echo "==================================="
+
+            # ============================================
+            # IMPROVED LOCK MECHANISM (Hybrid Approach)
+            # ============================================
+            LOCK_FILE="/tmp/frappe_deploy_prod.lock"
+            LOCK_TIMEOUT_SEC=600       # Wait max 10 minutes
+            STALE_LOCK_MINUTES=30      # Clean locks older than 30min
+            MY_PID=$$
+
+            echo ""
+            echo "🔒 Acquiring deployment lock..."
+
+            # Clean stale locks
+            if [ -f "$LOCK_FILE" ]; then
+              LOCK_AGE=$(($(date +%s) - $(stat -c %Y "$LOCK_FILE" 2>/dev/null || echo 0)))
+              LOCK_AGE_MINUTES=$((LOCK_AGE / 60))
+
+              if [ $LOCK_AGE_MINUTES -gt $STALE_LOCK_MINUTES ]; then
+                echo "⚠️  Removing stale lock (${LOCK_AGE_MINUTES} minutes old)"
+                rm -f "$LOCK_FILE"
+              else
+                # Check if process is alive
+                OLD_PID=$(cat "$LOCK_FILE" 2>/dev/null || echo "")
+                if [ -n "$OLD_PID" ] && ! ps -p "$OLD_PID" > /dev/null 2>&1; then
+                  echo "⚠️  Removing stale lock (process $OLD_PID is dead)"
+                  rm -f "$LOCK_FILE"
+                fi
+              fi
+            fi
+
+            # Acquire lock with timeout
+            exec 9>"$LOCK_FILE"
+
+            if ! flock -w $LOCK_TIMEOUT_SEC 9; then
+              echo "❌ Deployment lock timeout (waited ${LOCK_TIMEOUT_SEC}s)"
+              echo "Another deployment is running or stuck."
+              echo "To manually clear: ssh ubuntu@ec2 && rm -f /tmp/frappe_deploy_prod.lock"
+              exit 1
+            fi
+
+            echo $MY_PID > "$LOCK_FILE"
+            echo "✅ Lock acquired (PID: $MY_PID)"
+
+            # ============================================
+            # DEPLOYMENT STATE TRACKING
+            # ============================================
+            DEPLOYMENT_SUCCESS=true
+            DEPLOYMENT_EXIT_CODE=0
+            ROLLBACK_NEEDED=false
+            PREVIOUS_COMMIT=""
+            NEW_COMMIT=""
+
+            # Cleanup handler with automatic rollback
+            cleanup() {
+              local final_exit_code=$?
+
+              echo ""
+              echo "🧹 Cleanup triggered (exit code: $final_exit_code)"
+
+              # Release lock
+              if [ -f "$LOCK_FILE" ]; then
+                CURRENT_PID=$(cat "$LOCK_FILE" 2>/dev/null || echo "")
+                if [ "$CURRENT_PID" == "$MY_PID" ]; then
+                  rm -f "$LOCK_FILE"
+                  echo "🔓 Lock released"
+                fi
+              fi
+              flock -u 9 2>/dev/null || true
+
+              # Perform rollback if needed
+              if [ "$ROLLBACK_NEEDED" = true ] && [ -n "$PREVIOUS_COMMIT" ]; then
+                echo ""
+                echo "==================================="
+                echo "🔙 AUTOMATIC ROLLBACK INITIATED"
+                echo "==================================="
+
+                APP_DIR="/home/ubuntu/frappe-bench/apps/invoice"
+                BENCH_DIR="/home/ubuntu/frappe-bench"
+
+                cd "$APP_DIR"
+                echo "Rolling back from $NEW_COMMIT to $PREVIOUS_COMMIT"
+                git checkout "$PREVIOUS_COMMIT"
+
+                cd "$BENCH_DIR"
+                echo "Rebuilding previous version..."
+                timeout 10m bench build --app invoice 2>&1 || echo "⚠️  Build warning during rollback"
+
+                echo "Restarting services..."
+                bench restart 2>&1 || sudo supervisorctl restart all
+
+                sleep 5
+                echo ""
+                echo "📊 Status after rollback:"
+                sudo supervisorctl status
+
+                echo ""
+                echo "✅ Rollback completed"
+                echo "Site should be running on previous version"
+                echo "==================================="
+              fi
+
+              exit $final_exit_code
+            }
+
+            trap cleanup EXIT INT TERM
+
+            # Error handler
+            handle_error() {
+              local exit_code=$1
+              local step_name="$2"
+
+              echo ""
+              echo "❌ ERROR in step: $step_name"
+              echo "Exit code: $exit_code"
+
+              DEPLOYMENT_SUCCESS=false
+              DEPLOYMENT_EXIT_CODE=$exit_code
+              ROLLBACK_NEEDED=true
+            }
+
+            # Retry helper
+            retry() {
+              local retries=$1
+              local wait_time=$2
+              shift 2
+              local cmd="$*"
+
+              for ((i=1; i<=retries; i++)); do
+                echo "▶️  Attempt $i/$retries"
+
+                if eval "$cmd"; then
+                  echo "✅ Command succeeded"
+                  return 0
+                fi
+
+                local last_exit_code=$?
+                echo "⚠️  Command failed with exit code: $last_exit_code"
+
+                if [ "$i" -lt "$retries" ]; then
+                  echo "⏳ Waiting $wait_time seconds..."
+                  sleep "$wait_time"
+                fi
+              done
+
+              echo "❌ Command failed after $retries attempts"
+              return 1
+            }
+
+            # ============================================
+            # GIT UPDATE
+            # ============================================
+            echo ""
+            echo "📥 Updating Code"
+            echo "-----------------------------------"
+
+            APP_DIR="/home/ubuntu/frappe-bench/apps/invoice"
+
+            if [ ! -d "$APP_DIR" ]; then
+              handle_error 1 "App directory not found: $APP_DIR"
+              exit $DEPLOYMENT_EXIT_CODE
+            fi
+
+            cd "$APP_DIR" || { handle_error 1 "Failed to cd to app directory"; exit $DEPLOYMENT_EXIT_CODE; }
+
+            # Save current commit for rollback
+            PREVIOUS_COMMIT=$(git rev-parse HEAD 2>/dev/null || echo "unknown")
+            echo "📌 Current commit: $PREVIOUS_COMMIT"
+
+            # Target branch
+            BRANCH="${GITHUB_BRANCH:-main}"
+            echo "📌 Target branch: $BRANCH"
+
+            # Determine which remote to use
+            if git remote | grep -q "^origin$"; then
+              REMOTE="origin"
+              echo "📡 Using remote: origin"
+            elif git remote | grep -q "^upstream$"; then
+              REMOTE="upstream"
+              echo "📡 Using remote: upstream"
+            else
+              handle_error 1 "No git remote configured (origin or upstream)"
+              exit $DEPLOYMENT_EXIT_CODE
+            fi
+
+            # Fetch
+            echo "📡 Fetching latest changes from $REMOTE/$BRANCH..."
+            retry 3 10 "git fetch $REMOTE $BRANCH" || { handle_error $? "Git fetch"; exit $DEPLOYMENT_EXIT_CODE; }
+
+            # Checkout branch
+            echo "🔀 Switching to $BRANCH..."
+            git checkout $BRANCH || { handle_error $? "Git checkout $BRANCH"; exit $DEPLOYMENT_EXIT_CODE; }
+
+            # Set upstream tracking
+            git branch --set-upstream-to=$REMOTE/$BRANCH $BRANCH 2>/dev/null || true
+
+            # Pull with fallback
+            echo "📥 Pulling latest changes from $REMOTE/$BRANCH..."
+            if git pull $REMOTE $BRANCH 2>&1; then
+              echo "✅ Pull successful"
+            elif git pull $REMOTE $BRANCH --allow-unrelated-histories 2>&1; then
+              echo "⚠️  Pull successful (merged unrelated histories)"
+            else
+              echo "⚠️  Pull failed, attempting hard reset..."
+              git fetch $REMOTE $BRANCH
+              git reset --hard $REMOTE/$BRANCH || { handle_error $? "Git reset"; exit $DEPLOYMENT_EXIT_CODE; }
+              echo "✅ Hard reset successful"
+            fi
+
+            NEW_COMMIT=$(git rev-parse HEAD)
+            echo "✅ Updated to commit: $NEW_COMMIT"
+
+            if [ "$PREVIOUS_COMMIT" == "$NEW_COMMIT" ]; then
+              echo "ℹ️  No new changes to deploy"
+            fi
+
+            # ============================================
+            # BUILD
+            # ============================================
+            echo ""
+            echo "🏗️  Building Assets"
+            echo "-----------------------------------"
+
+            BENCH_DIR="/home/ubuntu/frappe-bench"
+            cd "$BENCH_DIR" || { handle_error 1 "Failed to cd to bench directory"; exit $DEPLOYMENT_EXIT_CODE; }
+
+            # Check if bench is available
+            if ! command -v bench &> /dev/null; then
+              echo "Adding bench to PATH..."
+              export PATH="$BENCH_DIR/env/bin:$PATH"
+            fi
+
+            BUILD_OUTPUT=$(timeout 10m bench build --app invoice 2>&1)
+            BUILD_EXIT_CODE=$?
+
+            echo "$BUILD_OUTPUT"
+
+            # Intelligent exit code handling
+            if [ $BUILD_EXIT_CODE -ne 0 ]; then
+              if echo "$BUILD_OUTPUT" | grep -qiE "error|fatal|failed"; then
+                echo "❌ Build failed with real errors"
+                handle_error $BUILD_EXIT_CODE "Build"
+                exit $DEPLOYMENT_EXIT_CODE
+              else
+                echo "⚠️  Build exited with code $BUILD_EXIT_CODE but no critical errors"
+                echo "✅ Continuing deployment..."
+              fi
+            else
+              echo "✅ Build completed successfully"
+            fi
+
+            # ============================================
+            # MIGRATION
+            # ============================================
+            echo ""
+            echo "🧬 Running Migrations"
+            echo "-----------------------------------"
+
+            MIGRATE_OUTPUT=$(timeout 10m bench --site all migrate 2>&1)
+            MIGRATE_EXIT_CODE=$?
+
+            echo "$MIGRATE_OUTPUT"
+
+            # Intelligent migration status check
+            if [ $MIGRATE_EXIT_CODE -ne 0 ]; then
+              # Check for real errors
+              if echo "$MIGRATE_OUTPUT" | grep -qiE "error|exception|traceback" | grep -v "No migration"; then
+                echo "❌ Migration failed with real errors"
+                handle_error $MIGRATE_EXIT_CODE "Migration"
+                exit $DEPLOYMENT_EXIT_CODE
+              # Check if migration completed despite exit code
+              elif echo "$MIGRATE_OUTPUT" | grep -qE "Updating DocTypes.*100%|Migration complete"; then
+                echo "⚠️  Migration exited with code $MIGRATE_EXIT_CODE but completed successfully"
+                echo "✅ Continuing deployment..."
+              else
+                echo "❌ Migration status unclear"
+                handle_error $MIGRATE_EXIT_CODE "Migration"
+                exit $DEPLOYMENT_EXIT_CODE
+              fi
+            else
+              echo "✅ Migration completed successfully"
+            fi
+
+            # ============================================
+            # CACHE CLEAR
+            # ============================================
+            echo ""
+            echo "🧹 Clearing Cache"
+            echo "-----------------------------------"
+
+            bench --site all clear-cache 2>&1 || echo "⚠️  Cache clear warning (non-critical)"
+            echo "✅ Cache cleared"
+
+            # ============================================
+            # SERVICE RESTART
+            # ============================================
+            echo ""
+            echo "🔁 Restarting Services"
+            echo "-----------------------------------"
+
+            if bench restart 2>&1; then
+              echo "✅ Services restarted via bench"
+            else
+              echo "⚠️  bench restart failed, trying supervisor..."
+              if sudo supervisorctl restart all 2>&1; then
+                echo "✅ Services restarted via supervisor"
+              else
+                handle_error $? "Service restart"
+                exit $DEPLOYMENT_EXIT_CODE
+              fi
+            fi
+
+            echo "⏳ Waiting 10s for services to stabilize..."
+            sleep 10
+
+            # ============================================
+            # CRITICAL HEALTH CHECK (with Redis focus)
+            # ============================================
+            echo ""
+            echo "🏥 Health Check"
+            echo "-----------------------------------"
+
+            SUPERVISOR_STATUS=$(sudo supervisorctl status 2>&1)
+            echo "$SUPERVISOR_STATUS"
+
+            # CHECK REDIS SPECIFICALLY
+            if echo "$SUPERVISOR_STATUS" | grep redis | grep -qE "FATAL|STOPPED|EXITED"; then
+              echo ""
+              echo "❌ REDIS IS DOWN - Attempting emergency fix..."
+
+              sudo killall redis-server 2>/dev/null || true
+              sleep 2
+
+              cd "$BENCH_DIR"
+              bench setup redis
+              bench setup supervisor --yes
+              sudo supervisorctl reread && sudo supervisorctl update
+              sudo supervisorctl start frappe-bench-redis:*
+
+              sleep 5
+              SUPERVISOR_STATUS=$(sudo supervisorctl status 2>&1)
+              echo "$SUPERVISOR_STATUS"
+
+              if echo "$SUPERVISOR_STATUS" | grep redis | grep -qE "FATAL|STOPPED"; then
+                echo "❌ Redis recovery FAILED"
+                echo "📋 Redis logs:"
+                sudo tail -50 /var/log/supervisor/frappe-bench-redis-*.log 2>&1 || true
+                handle_error 1 "Redis health check"
+                exit $DEPLOYMENT_EXIT_CODE
+              fi
+
+              echo "✅ Redis recovered, restarting dependent services..."
+              sudo supervisorctl restart frappe-bench-web:*
+              sudo supervisorctl restart frappe-bench-workers:*
+              sleep 5
+
+              SUPERVISOR_STATUS=$(sudo supervisorctl status 2>&1)
+              echo "$SUPERVISOR_STATUS"
+            fi
+
+            # CHECK OTHER CRITICAL SERVICES
+            if echo "$SUPERVISOR_STATUS" | grep -qE "FATAL"; then
+              echo "❌ Critical services are FATAL"
+              echo "$SUPERVISOR_STATUS" | grep "FATAL"
+              handle_error 1 "Service health check"
+              exit $DEPLOYMENT_EXIT_CODE
+            fi
+
+            # BACKOFF is temporary, wait and recheck
+            if echo "$SUPERVISOR_STATUS" | grep -q "BACKOFF"; then
+              echo "⚠️  Services in BACKOFF, waiting 10s..."
+              sleep 10
+              SUPERVISOR_STATUS=$(sudo supervisorctl status 2>&1)
+              echo "$SUPERVISOR_STATUS"
+
+              if echo "$SUPERVISOR_STATUS" | grep -qE "FATAL|EXITED"; then
+                echo "❌ Services still not healthy after BACKOFF wait"
+                handle_error 1 "Service health check"
+                exit $DEPLOYMENT_EXIT_CODE
+              fi
+            fi
+
+            RUNNING_COUNT=$(echo "$SUPERVISOR_STATUS" | grep -c "RUNNING" || echo "0")
+            echo "✅ Services running: $RUNNING_COUNT"
+
+            if [ "$RUNNING_COUNT" -lt 3 ]; then
+              echo "⚠️  Low service count (expected 5+, got $RUNNING_COUNT)"
+              handle_error 1 "Insufficient services running"
+              exit $DEPLOYMENT_EXIT_CODE
+            fi
+
+            # ============================================
+            # SUCCESS TAG
+            # ============================================
+            if [ "$DEPLOYMENT_SUCCESS" = true ]; then
+              echo ""
+              echo "🏷️  Creating Success Tag"
+              echo "-----------------------------------"
+
+              cd "$APP_DIR"
+              TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+
+              if git tag -a "deploy-prod-success-$TIMESTAMP" -m "Successful production deployment at $TIMESTAMP" 2>&1; then
+                echo "✅ Tag created: deploy-prod-success-$TIMESTAMP"
+              else
+                echo "⚠️  Failed to create tag, but deployment succeeded"
+              fi
+            fi
+
+            # ============================================
+            # FINAL SUMMARY
+            # ============================================
+            echo ""
+            echo "==================================="
+            if [ "$DEPLOYMENT_SUCCESS" = true ]; then
+              echo "✅ DEPLOYMENT SUCCESSFUL"
+            else
+              echo "❌ DEPLOYMENT FAILED"
+            fi
+            echo "==================================="
+            echo "🏭 Environment: ${ENVIRONMENT}"
+            echo "📅 Completed: $(date)"
+            echo "📌 Branch: $BRANCH"
+            echo "📌 From: $PREVIOUS_COMMIT"
+            echo "📌 To: $NEW_COMMIT"
+            echo "📊 Services: $RUNNING_COUNT running"
+            echo "==================================="
+
+            exit $DEPLOYMENT_EXIT_CODE
+
+      - name: Check final status
+        if: always()
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.CULLINAR_ERP_EC2_HOST }}
+          username: ubuntu
+          key: ${{ secrets.CULLINAR_ERP_EC2_SSH_KEY }}
+          script: |
+            echo "📋 Production Deployment log (last 100 lines):"
+            tail -100 /home/ubuntu/deploy-prod.log
+
+            echo ""
+            echo "📊 Final supervisor status:"
+            sudo supervisorctl status
+
+      - name: Notify Slack on success
+        if: success()
+        env:
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+        run: |
+          COMMIT_MSG=$(git log -1 --pretty=format:"%s" | head -c 100)
+          COMMIT_SHA=$(git rev-parse --short HEAD)
+
+          curl -X POST "$SLACK_WEBHOOK" \
+            -H 'Content-Type: application/json' \
+            -d "{
+              \"attachments\": [{
+                \"color\": \"good\",
+                \"title\": \":rocket: Frappe Production Deployment SUCCESS (invoice)\",
+                \"fields\": [
+                  {\"title\": \"Environment\", \"value\": \"🏭 Production\", \"short\": true},
+                  {\"title\": \"Branch\", \"value\": \"${{ github.ref_name }}\", \"short\": true},
+                  {\"title\": \"Commit\", \"value\": \"$COMMIT_SHA\", \"short\": true},
+                  {\"title\": \"Author\", \"value\": \"${{ github.actor }}\", \"short\": true},
+                  {\"title\": \"Message\", \"value\": \"$COMMIT_MSG\", \"short\": false}
+                ],
+                \"actions\": [
+                  {\"type\": \"button\", \"text\": \"🔙 Rollback\", \"url\": \"https://github.com/${{ github.repository }}/actions/workflows/rollback-frappe-prod.yml\"}
+                ],
+                \"footer\": \"GitHub Actions\",
+                \"ts\": $(date +%s)
+              }]
+            }"
+
+      - name: Notify Slack on failure
+        if: failure()
+        env:
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+        run: |
+          curl -X POST "$SLACK_WEBHOOK" \
+            -H 'Content-Type: application/json' \
+            -d "{
+              \"attachments\": [{
+                \"color\": \"danger\",
+                \"title\": \":x: Frappe Production Deployment FAILED (invoice)\",
+                \"text\": \"⚠️ PRODUCTION deployment failed! Automatic rollback was attempted. Site should be running on previous version.\",
+                \"fields\": [
+                  {\"title\": \"Environment\", \"value\": \"🏭 Production\", \"short\": true},
+                  {\"title\": \"Branch\", \"value\": \"${{ github.ref_name }}\", \"short\": true},
+                  {\"title\": \"Commit\", \"value\": \"$(git rev-parse --short HEAD)\", \"short\": true},
+                  {\"title\": \"Author\", \"value\": \"${{ github.actor }}\", \"short\": true}
+                ],
+                \"actions\": [
+                  {\"type\": \"button\", \"text\": \"📋 View Logs\", \"url\": \"https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}\"},
+                  {\"type\": \"button\", \"text\": \"🔙 Manual Rollback\", \"url\": \"https://github.com/${{ github.repository }}/actions/workflows/rollback-frappe-prod.yml\"}
+                ],
+                \"footer\": \"GitHub Actions\",
+                \"ts\": $(date +%s)
+              }]
+            }"
