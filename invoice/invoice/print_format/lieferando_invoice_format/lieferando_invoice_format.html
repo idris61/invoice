@@ -745,8 +745,12 @@
 			{%- set cash_amount_f = doc.cash_paid_amount|float if doc.cash_paid_amount else 0.0 -%}
 			{%- set online_orders_i = (doc.online_paid_orders|int if doc.online_paid_orders else max(0, total_orders_i - cash_orders_i)) -%}
 			{%- set online_amount_f = (doc.online_paid_amount|float if doc.online_paid_amount else max(0.0, total_revenue_f - cash_amount_f)) -%}
-			{%- set admin_rate_f = doc.admin_fee_rate|float if doc.admin_fee_rate else 0.64 -%}
-			{%- set admin_amount_f = (doc.admin_fee_amount|float if doc.admin_fee_amount else round(admin_rate_f * online_orders_i, 2)) -%}
+			{%- set admin_rate_f = doc.admin_fee_rate|float if doc.admin_fee_rate else None -%}
+			{%- if admin_rate_f is not none -%}
+				{%- set admin_amount_f = (doc.admin_fee_amount|float if doc.admin_fee_amount else round(admin_rate_f * online_orders_i, 2)) -%}
+			{%- else -%}
+				{%- set admin_amount_f = doc.admin_fee_amount|float if doc.admin_fee_amount else 0.0 -%}
+			{%- endif -%}
 			
 			<div class="service-item">
 				<div class="service-title">Lieferando.de ({{ frappe.utils.format_date(doc.period_start, "dd-MM-yyyy") }} bis einschließlich {{ frappe.utils.format_date(doc.period_end, "dd-MM-yyyy") }}): {{ doc.total_orders }} Bestellungen im Wert von € {{ format_currency(doc.total_revenue) }}</div>

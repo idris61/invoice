@@ -4,13 +4,7 @@ Magic numbers ve hardcoded değerler burada tanımlanır
 """
 
 # Fee Rates
-DEFAULT_ADMIN_FEE_RATE = 0.64
 DEFAULT_CULINARY_ACCOUNT_FEE = 0.35
-DEFAULT_ADDITIONAL_SERVICE_FEE_RATE = 1.95
-
-# VAT Rates
-VAT_RATE_19 = 19
-VAT_RATE_7 = 7
 
 # Service Fee Rates
 SERVICE_FEE_OWN_DELIVERY = 12

@@ -2,6 +2,7 @@ import frappe
 import re
 import json
 from datetime import datetime
+from invoice.api.constants import DEFAULT_EXTRACTION_CONFIDENCE
 
 try:
     import PyPDF2
@@ -258,7 +259,7 @@ def create_lieferando_invoice_doc(communication_doc, pdf_attachment, extracted_d
         "customer_bank_iban": extracted_data.get("customer_bank_iban"),
         "total_orders": extracted_data.get("total_orders") or 0,
         "total_revenue": extracted_data.get("total_revenue") or 0,
-        "online_paid_orders": extracted_data.get("online_paid_orders") or 0,
+        "online_paid_orders": extracted_data.get("online_paid_orders") if extracted_data.get("online_paid_orders") is not None else 0,
         "online_paid_amount": extracted_data.get("online_paid_amount") or 0,
         "cash_paid_orders": extracted_data.get("cash_paid_orders") or 0,
         "cash_paid_amount": extracted_data.get("cash_paid_amount") or 0,
@@ -274,10 +275,10 @@ def create_lieferando_invoice_doc(communication_doc, pdf_attachment, extracted_d
         "confirmation_code_message": extracted_data.get("confirmation_code_message"),
         "service_fee_rate": extracted_data.get("service_fee_rate") or 30,
         "service_fee_amount": extracted_data.get("service_fee_amount") or 0,
-        "admin_fee_rate": extracted_data.get("admin_fee_rate") or 0.64,
+        "admin_fee_rate": extracted_data.get("admin_fee_rate"),
         "admin_fee_amount": extracted_data.get("admin_fee_amount") or 0,
         "subtotal": extracted_data.get("subtotal") or 0,
-        "tax_rate": extracted_data.get("tax_rate") or 19,
+        "tax_rate": extracted_data.get("tax_rate"),
         "tax_amount": extracted_data.get("tax_amount") or 0,
         "total_amount": extracted_data.get("total_amount") or 0,
         "paid_online_payments": extracted_data.get("paid_online_payments") or 0,
@@ -288,7 +289,7 @@ def create_lieferando_invoice_doc(communication_doc, pdf_attachment, extracted_d
         "email_from": communication_doc.sender,
         "received_date": communication_doc.creation,
         "processed_date": frappe.utils.now(),
-        "extraction_confidence": extracted_data.get("confidence", 50),
+        "extraction_confidence": extracted_data.get("confidence", DEFAULT_EXTRACTION_CONFIDENCE),
         "raw_text": extracted_data.get("raw_text", "")
     })
     
@@ -365,7 +366,7 @@ def create_wolt_invoice_doc(communication_doc, pdf_attachment, extracted_data):
         "email_from": communication_doc.sender,
         "received_date": communication_doc.creation,
         "processed_date": frappe.utils.now(),
-        "extraction_confidence": extracted_data.get("confidence", 55),
+        "extraction_confidence": extracted_data.get("confidence", DEFAULT_EXTRACTION_CONFIDENCE),
         "raw_text": extracted_data.get("raw_text", "")
     })
     
@@ -489,7 +490,7 @@ def extract_invoice_data_from_pdf(pdf_attachment):
         
         data = {
             "raw_text": full_text,
-            "confidence": 60
+            "confidence": DEFAULT_EXTRACTION_CONFIDENCE
         }
         
         # Rechnungsnummer extraction - UberEats faturaları için özel pattern (öncelikli)
@@ -737,11 +738,19 @@ def extract_lieferando_fields(full_text: str) -> dict:
 
     # Verwaltungsgebühr (Online-Zahlungen) satırı: online sipariş sayısı + online sipariş tutarı
     # Örnek: "Verwaltungsgebühr (Online-Zahlungen) (...): 21 Bestellungen im Wert von € 446,50"
+    # Pattern'i multiline ve daha esnek hale getiriyoruz - newline karakterlerini de kabul ediyor
     admin_title_match = re.search(
         r'Verwaltungsgebühr\s*\(Online-Zahlungen\)\s*\([^)]+\)\s*:\s*(\d+)\s+Bestellungen\s+im\s+Wert\s+von\s*€\s*([\d,\.]+)',
         full_text,
-        re.IGNORECASE
+        re.IGNORECASE | re.MULTILINE | re.DOTALL
     )
+    # Eğer ilk pattern match etmezse, daha esnek bir pattern dene (satırlar ayrılmış olabilir)
+    if not admin_title_match:
+        admin_title_match = re.search(
+            r'Verwaltungsgebühr\s*\(Online-Zahlungen\)[\s\S]*?(\d+)\s+Bestellungen\s+im\s+Wert\s+von\s*€\s*([\d,\.]+)',
+            full_text,
+            re.IGNORECASE | re.MULTILINE | re.DOTALL
+        )
     if admin_title_match:
         try:
             data["online_paid_orders"] = int(admin_title_match.group(1))
@@ -1550,7 +1559,7 @@ def create_uber_eats_invoice_doc(communication_doc, pdf_attachment, extracted_da
         "email_from": communication_doc.sender,
         "received_date": communication_doc.creation,
         "processed_date": frappe.utils.now(),
-        "extraction_confidence": extracted_data.get("confidence", 55),
+        "extraction_confidence": extracted_data.get("confidence", DEFAULT_EXTRACTION_CONFIDENCE),
         "raw_text": extracted_data.get("raw_text", "")
     })
     

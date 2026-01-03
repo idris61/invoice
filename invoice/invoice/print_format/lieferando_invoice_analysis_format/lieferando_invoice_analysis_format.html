@@ -391,6 +391,11 @@
 			align-items: baseline;
 		}
 		
+		.payout-section > div:first-of-type {
+			word-wrap: break-word;
+			overflow-wrap: break-word;
+		}
+		
 		.payout-euro {
 			text-align: right;
 			font-weight: normal;
@@ -420,6 +425,18 @@
 		
 		.payout-amount.bold {
 			font-weight: 700;
+		}
+		
+		.payout-amount-red {
+			color: #ff0000;
+			font-weight: 700;
+			font-size: 12pt;
+		}
+		
+		.payout-instruction {
+			margin-top: 10px;
+			font-size: 10pt;
+			line-height: 1.4;
 		}
 		
 		.payout-total-row {
@@ -728,31 +745,39 @@
 		<div class="services-section">
 			<div class="services-intro">Folgende Leistungen stellen wir Ihnen in Rechnung:</div>
 			
+			{%- set chargeback_orders = doc.chargeback_orders|int if doc.chargeback_orders else 0 -%}
+			{%- set online_paid_orders_count = doc.online_paid_orders|int if doc.online_paid_orders else 0 -%}
+			{%- set effective_online_orders = max(0, online_paid_orders_count - chargeback_orders) -%}
+			{%- set chargeback_amount = doc.chargeback_amount|float if doc.chargeback_amount else 0.0 -%}
+			{%- set effective_online_amount = (doc.online_paid_amount|float if doc.online_paid_amount else 0.0) - chargeback_amount -%}
+			
 			<div class="service-item">
-				<div class="service-title">Lieferando.de ({{ frappe.utils.format_date(doc.period_start, "dd-MM-yyyy") }} bis einschließlich {{ frappe.utils.format_date(doc.period_end, "dd-MM-yyyy") }}): {{ doc.total_orders }} Bestellungen im Wert von € {{ format_currency(doc.total_revenue) }}</div>
+				<div class="service-title">Lieferando.de ({{ frappe.utils.format_date(doc.period_start, "dd-MM-yyyy") }} bis einschließlich {{ frappe.utils.format_date(doc.period_end, "dd-MM-yyyy") }}): {{ effective_online_orders }} Bestellungen im Wert von € {{ format_currency(effective_online_amount) }}</div>
 				{%- set ref_rate = doc.reference_service_fee_rate|float if (doc.reference_service_fee_rate is not none and doc.reference_service_fee_rate|float > 0) else (12.0 if (not doc.service_fee_rate or doc.service_fee_rate|float <= 12.0) else 30.0) -%}
-				{%- set ref_amount = doc.reference_service_fee_amount|float if (doc.reference_service_fee_amount is not none and doc.reference_service_fee_amount|float > 0) else ((doc.total_revenue|float * ref_rate / 100) if doc.total_revenue else 0) -%}
+				{%- set ref_amount = (effective_online_amount|float * ref_rate / 100) if effective_online_amount else 0.0 -%}
 				<div class="service-fee-row">
-					<span class="service-fee">Servicegebühr: {{ "{:,.2f}".format(ref_rate).replace(".", ",") }}% von € {{ format_currency(doc.total_revenue) }}</span>
+					<span class="service-fee">Servicegebühr: {{ "{:,.2f}".format(ref_rate).replace(".", ",") }}% von € {{ format_currency(effective_online_amount) }}</span>
 					<span class="service-euro">€</span>
 					<span class="service-amount">{{ format_currency(ref_amount) }}</span>
 				</div>
 			</div>
-			
-			{% if doc.management_fee and doc.management_fee > 0 %}
-			{%- set chargeback_orders = doc.chargeback_orders|int if doc.chargeback_orders else 0 -%}
-			{%- set effective_online_orders = max(0, (doc.online_paid_orders|int if doc.online_paid_orders else 0) - chargeback_orders) -%}
-			{%- set chargeback_amount = doc.chargeback_amount|float if doc.chargeback_amount else 0.0 -%}
-			{%- set effective_online_amount = (doc.online_paid_amount|float if doc.online_paid_amount else 0.0) - chargeback_amount -%}
+			{%- set admin_fee_rate_display = invoice_data.admin_fee_rate|float if (invoice_data.admin_fee_rate is not none and invoice_data.admin_fee_rate|float > 0) else None -%}
+			{%- if admin_fee_rate_display is not none -%}
+				{%- set management_fee_calculated = admin_fee_rate_display * effective_online_orders if effective_online_orders > 0 else 0.0 -%}
+				{%- set management_fee_display = doc.management_fee|float if (doc.management_fee is not none and doc.management_fee|float > 0) else management_fee_calculated -%}
+			{%- else -%}
+				{%- set management_fee_display = doc.management_fee|float if (doc.management_fee is not none and doc.management_fee|float > 0) else 0.0 -%}
+			{%- endif -%}
+			{%- if effective_online_orders > 0 and management_fee_display > 0 and admin_fee_rate_display is not none -%}
 			<div class="service-item">
 				<div class="service-title">Verwaltungsgebühr (Online-Zahlungen) ({{ frappe.utils.format_date(doc.period_start, "dd-MM-yyyy") }} bis einschließlich {{ frappe.utils.format_date(doc.period_end, "dd-MM-yyyy") }}): {{ effective_online_orders }} Bestellungen im Wert von € {{ format_currency(effective_online_amount) }}</div>
 				<div class="service-fee-row{% if doc.cash_paid_orders and doc.cash_paid_orders > 0 or (doc.culinary_account_fee and doc.culinary_account_fee|float > 0) %}{% else %} service-fee-row-underline{% endif %}">
-					<span class="service-fee">Servicegebühr: € {{ format_currency((invoice_data.admin_fee_rate if invoice_data.admin_fee_rate else (doc.management_fee / effective_online_orders if effective_online_orders > 0 else 0.64))) }} x {{ effective_online_orders }}</span>
+					<span class="service-fee">Servicegebühr: € {{ format_currency(admin_fee_rate_display) }} x {{ effective_online_orders }}</span>
 					<span class="service-euro">€</span>
-					<span class="service-amount">{{ format_currency(doc.management_fee) }}</span>
+					<span class="service-amount">{{ format_currency(management_fee_display) }}</span>
 				</div>
 			</div>
-			{% endif %}
+			{%- endif -%}
 			
 			{% if doc.culinary_account_fee and doc.culinary_account_fee|float > 0 %}
 			<div class="service-item">
@@ -777,26 +802,63 @@
 		</div>
 		
 		<div class="amounts-section">
-			{%- set tax_rate_display = invoice_data.tax_rate|float if (invoice_data.tax_rate is not none and invoice_data.tax_rate|float > 0) else 19.0 -%}
+			{%- set tax_rate_display = invoice_data.tax_rate|float if (invoice_data.tax_rate is not none and invoice_data.tax_rate|float > 0) else None -%}
+			{%- set chargeback_orders_calc = doc.chargeback_orders|int if doc.chargeback_orders else 0 -%}
+			{%- set online_paid_orders_calc = doc.online_paid_orders|int if doc.online_paid_orders else 0 -%}
+			{%- set effective_online_orders_calc = max(0, online_paid_orders_calc - chargeback_orders_calc) -%}
+			{%- set chargeback_amount_calc = doc.chargeback_amount|float if doc.chargeback_amount else 0.0 -%}
+			{%- set effective_online_amount_calc = (doc.online_paid_amount|float if doc.online_paid_amount else 0.0) - chargeback_amount_calc -%}
+			{%- set ref_rate_calc = doc.reference_service_fee_rate|float if (doc.reference_service_fee_rate is not none and doc.reference_service_fee_rate|float > 0) else (12.0 if (not doc.service_fee_rate or doc.service_fee_rate|float <= 12.0) else 30.0) -%}
+			{%- set displayed_subtotal = (effective_online_amount_calc|float * ref_rate_calc / 100) if effective_online_amount_calc else 0.0 -%}
+			{%- set admin_fee_rate_calc = invoice_data.admin_fee_rate|float if (invoice_data.admin_fee_rate is not none and invoice_data.admin_fee_rate|float > 0) else None -%}
+			{%- if admin_fee_rate_calc is not none -%}
+				{%- set management_fee_calculated = admin_fee_rate_calc * effective_online_orders_calc if effective_online_orders_calc > 0 else 0.0 -%}
+				{%- set management_fee_calc = doc.management_fee|float if (doc.management_fee is not none and doc.management_fee|float > 0) else management_fee_calculated -%}
+			{%- else -%}
+				{%- set management_fee_calc = doc.management_fee|float if (doc.management_fee is not none and doc.management_fee|float > 0) else 0.0 -%}
+			{%- endif -%}
+			{%- if effective_online_orders_calc > 0 and management_fee_calc > 0 and admin_fee_rate_calc is not none -%}
+				{%- set displayed_subtotal = displayed_subtotal + management_fee_calc -%}
+			{%- endif -%}
+			{%- if doc.culinary_account_fee and doc.culinary_account_fee|float > 0 -%}
+				{%- set displayed_subtotal = displayed_subtotal + (doc.culinary_account_fee|float) -%}
+			{%- endif -%}
+			{%- if doc.cash_service_fee_amount and doc.cash_service_fee_amount|float > 0 -%}
+				{%- set displayed_subtotal = displayed_subtotal + (doc.cash_service_fee_amount|float) -%}
+			{%- endif -%}
 			<div class="amount-row">
 				<span class="amount-label">Zwischensumme</span>
 				<span class="amount-euro">€</span>
-				<span class="amount-value">{{ format_currency(doc.reference_subtotal) }}</span>
+				<span class="amount-value">{{ format_currency(displayed_subtotal) }}</span>
 			</div>
+			{%- if tax_rate_display is not none and tax_rate_display > 0 -%}
 			<div class="amount-row amount-row-underline">
-				<span class="amount-label">MwSt. ({{ "{:,.1f}".format(tax_rate_display).replace(".", ",") }}% von € {{ format_currency(doc.reference_subtotal) }})</span>
+				<span class="amount-label">MwSt. ({{ "{:,.1f}".format(tax_rate_display).replace(".", ",") }}% von € {{ format_currency(displayed_subtotal) }})</span>
 				<span class="amount-euro">€</span>
-				<span class="amount-value">{{ format_currency(doc.reference_vat_amount) }}</span>
+				{%- set displayed_vat = displayed_subtotal * (tax_rate_display / 100) -%}
+				<span class="amount-value">{{ format_currency(displayed_vat) }}</span>
 			</div>
+			{%- else -%}
+			<div class="amount-row amount-row-underline">
+				<span class="amount-label">MwSt. (Rate missing)</span>
+				<span class="amount-euro">€</span>
+				<span class="amount-value">{{ format_currency(0) }}</span>
+			</div>
+			{%- endif -%}
 			<div class="amount-row total-row">
 				<span class="amount-label">Gesamtbetrag dieser Rechnung</span>
 				<span class="amount-euro">€</span>
-				<span class="amount-value">{{ format_currency(doc.reference_total_invoice_amount) }}</span>
+				{%- if tax_rate_display is not none and tax_rate_display > 0 -%}
+					{%- set displayed_total = displayed_subtotal + displayed_vat -%}
+				{%- else -%}
+					{%- set displayed_total = displayed_subtotal -%}
+				{%- endif -%}
+				<span class="amount-value">{{ format_currency(displayed_total) }}</span>
 			</div>
 			<div class="amount-row amount-row-underline">
 				<span class="amount-label">Verrechnet mit eingegangenen Onlinebezahlungen</span>
 				<span class="amount-euro">€</span>
-				<span class="amount-value">{{ format_currency(doc.reference_total_invoice_amount) }}</span>
+				<span class="amount-value">{{ format_currency(displayed_total) }}</span>
 			</div>
 			<div class="amount-row outstanding-row">
 				<span class="amount-label">Offener Rechnungsbetrag</span>
@@ -813,10 +875,12 @@
 		{% endif %}
 		
 		<div class="revenue-info">
-			<div>Ihr Umsatz in der Zeit vom {{ frappe.utils.format_date(doc.period_start, "dd-MM-yyyy") }} bis einschließlich {{ frappe.utils.format_date(doc.period_end, "dd-MM-yyyy") }}: € {{ format_currency(doc.total_revenue) }}.</div>
-			{% if doc.net_revenue and doc.net_revenue != doc.total_revenue %}
-			<div>Netto Umsatz (nach Rückbuchungen): € {{ format_currency(doc.net_revenue) }}.</div>
-			{% endif %}
+			{%- set revenue_chargeback_orders = doc.chargeback_orders|int if doc.chargeback_orders else 0 -%}
+			{%- set revenue_online_paid_orders = doc.online_paid_orders|int if doc.online_paid_orders else 0 -%}
+			{%- set revenue_effective_online_orders = max(0, revenue_online_paid_orders - revenue_chargeback_orders) -%}
+			{%- set revenue_chargeback_amount = doc.chargeback_amount|float if doc.chargeback_amount else 0.0 -%}
+			{%- set revenue_effective_online_amount = (doc.online_paid_amount|float if doc.online_paid_amount else 0.0) - revenue_chargeback_amount -%}
+			<div>Ihr Umsatz in der Zeit vom {{ frappe.utils.format_date(doc.period_start, "dd-MM-yyyy") }} bis einschließlich {{ frappe.utils.format_date(doc.period_end, "dd-MM-yyyy") }}: € {{ format_currency(revenue_effective_online_amount) }}.</div>
 		</div>
 		
 		<div class="supplier-footer">
@@ -877,9 +941,14 @@
 		</div>
 		
 		<div class="summary-section">
+			{%- set summary_chargeback_orders = doc.chargeback_orders|int if doc.chargeback_orders else 0 -%}
+			{%- set summary_online_paid_orders = doc.online_paid_orders|int if doc.online_paid_orders else 0 -%}
+			{%- set summary_effective_online_orders = max(0, summary_online_paid_orders - summary_chargeback_orders) -%}
+			{%- set summary_chargeback_amount = doc.chargeback_amount|float if doc.chargeback_amount else 0.0 -%}
+			{%- set summary_effective_online_amount = (doc.online_paid_amount|float if doc.online_paid_amount else 0.0) - summary_chargeback_amount -%}
 			<div class="summary-row">
 				<div>Gesamt</div>
-				<div>{{ doc.total_orders }} Bestellungen im Wert von € {{ format_currency(doc.total_revenue) }}</div>
+				<div>{{ summary_effective_online_orders }} Bestellungen im Wert von € {{ format_currency(summary_effective_online_amount) }}</div>
 			</div>
 			{% if doc.cash_paid_orders and doc.cash_paid_orders > 0 %}
 			<div class="summary-row">
@@ -889,8 +958,14 @@
 			{% endif %}
 			<div class="summary-row">
 				<div>Online bezahlt *</div>
-				<div>{{ doc.online_paid_orders }} Bestellungen im Wert von € {{ format_currency(doc.online_paid_amount) }}</div>
+				<div>{{ summary_effective_online_orders }} Bestellungen im Wert von € {{ format_currency(summary_effective_online_amount) }}</div>
 			</div>
+			{% if summary_chargeback_orders > 0 and summary_chargeback_amount > 0 %}
+			<div class="summary-row">
+				<div>Rückbuchung</div>
+				<div>{{ summary_chargeback_orders }} Bestellungen im Wert von € {{ format_currency(summary_chargeback_amount) }}</div>
+			</div>
+			{% endif %}
 			{% if doc.stamp_card_amount and doc.stamp_card_amount > 0 %}
 			<div class="summary-row">
 				<div style="white-space: nowrap;">davon mit Stempelkarte bezahlt **</div>
@@ -915,16 +990,64 @@
 			</div>
 			
 			<div>Rechnungsausgleich {{ doc.invoice_number }}</div>
-			<div class="payout-row-underline">
+			<div style="grid-column: 2 / 4; display: grid; grid-template-columns: 18px 80px; column-gap: 8px;">
 				<div class="payout-euro">€</div>
-				<div class="payout-amount">{{ format_currency(doc.reference_total_invoice_amount) }}</div>
+				{%- set page2_chargeback_orders = doc.chargeback_orders|int if doc.chargeback_orders else 0 -%}
+				{%- set page2_online_paid_orders = doc.online_paid_orders|int if doc.online_paid_orders else 0 -%}
+				{%- set page2_effective_online_orders = max(0, page2_online_paid_orders - page2_chargeback_orders) -%}
+				{%- set page2_chargeback_amount = doc.chargeback_amount|float if doc.chargeback_amount else 0.0 -%}
+				{%- set page2_effective_online_amount = (doc.online_paid_amount|float if doc.online_paid_amount else 0.0) - page2_chargeback_amount -%}
+				{%- set page2_ref_rate = doc.reference_service_fee_rate|float if (doc.reference_service_fee_rate is not none and doc.reference_service_fee_rate|float > 0) else (12.0 if (not doc.service_fee_rate or doc.service_fee_rate|float <= 12.0) else 30.0) -%}
+				{%- set page2_subtotal = (page2_effective_online_amount|float * page2_ref_rate / 100) if page2_effective_online_amount else 0.0 -%}
+				{%- set page2_admin_fee_rate = invoice_data.admin_fee_rate|float if (invoice_data.admin_fee_rate is not none and invoice_data.admin_fee_rate|float > 0) else None -%}
+				{%- if page2_admin_fee_rate is not none -%}
+					{%- set page2_management_fee_calculated = page2_admin_fee_rate * page2_effective_online_orders if page2_effective_online_orders > 0 else 0.0 -%}
+					{%- set page2_management_fee = doc.management_fee|float if (doc.management_fee is not none and doc.management_fee|float > 0) else page2_management_fee_calculated -%}
+				{%- else -%}
+					{%- set page2_management_fee = doc.management_fee|float if (doc.management_fee is not none and doc.management_fee|float > 0) else 0.0 -%}
+				{%- endif -%}
+				{%- if page2_effective_online_orders > 0 and page2_management_fee > 0 and page2_admin_fee_rate is not none -%}
+					{%- set page2_subtotal = page2_subtotal + page2_management_fee -%}
+				{%- endif -%}
+				{%- if doc.culinary_account_fee and doc.culinary_account_fee|float > 0 -%}
+					{%- set page2_subtotal = page2_subtotal + (doc.culinary_account_fee|float) -%}
+				{%- endif -%}
+				{%- if doc.cash_service_fee_amount and doc.cash_service_fee_amount|float > 0 -%}
+					{%- set page2_subtotal = page2_subtotal + (doc.cash_service_fee_amount|float) -%}
+				{%- endif -%}
+				{%- set page2_tax_rate = invoice_data.tax_rate|float if (invoice_data.tax_rate is not none and invoice_data.tax_rate|float > 0) else None -%}
+				{%- if page2_tax_rate is not none and page2_tax_rate > 0 -%}
+					{%- set page2_vat = page2_subtotal * (page2_tax_rate / 100) -%}
+					{%- set page2_total = page2_subtotal + page2_vat -%}
+				{%- else -%}
+					{%- set page2_vat = 0.0 -%}
+					{%- set page2_total = page2_subtotal -%}
+				{%- endif -%}
+				<div class="payout-amount">{{ format_currency(page2_total) }}</div>
 			</div>
 			
-			<div>Auszahlung auf das Bankkonto {% if invoice_data.supplier_iban %}{{ format_iban(invoice_data.supplier_iban) }}{% else %}{{ invoice_data.supplier_iban or '' }}{% endif %} z.Hd. {{ invoice_data.customer_company or '' }}</div>
-			<div class="payout-row-underline">
-				<div class="payout-euro">€</div>
-				<div class="payout-amount bold">{{ format_currency(doc.payment_to_restaurant_h) }}</div>
-			</div>
+			{%- set payout_pending = doc.pending_online_payments_g|float if doc.pending_online_payments_g else 0.0 -%}
+			{%- set payout_amount = payout_pending - page2_total -%}
+			{%- if payout_amount and payout_amount != 0 -%}
+				{%- set customer_bank_iban = invoice_data.customer_bank_iban if invoice_data else None -%}
+				{%- set customer_company = invoice_data.customer_company if invoice_data else None -%}
+				{%- if customer_bank_iban -%}
+					{# Format 1: IBAN varsa - Auszahlung auf das Bankkonto #}
+					<div class="payout-total-row">
+						<div>Auszahlung auf das Bankkonto {{ customer_bank_iban }} z.Hd. {{ customer_company or '' }}</div>
+						<div class="payout-euro">€</div>
+						<div class="payout-amount bold">{{ format_currency(payout_amount) }}</div>
+					</div>
+				{%- else -%}
+					{# Format 2: IBAN yoksa - Zu begleichender Betrag #}
+					<div style="grid-column: 1 / -1; margin-top: 20px;">
+						<div style="color: #ff0000; font-weight: 700; font-size: 12pt; margin-bottom: 8px;">Zu begleichender Betrag: € {{ format_currency(payout_amount) }}</div>
+						<div class="payout-instruction">
+							Am {% if invoice_data.invoice_date %}{{ frappe.utils.format_date(invoice_data.invoice_date, "dd-MM-yyyy") }}{% else %}{{ frappe.utils.format_date(frappe.utils.today(), "dd-MM-yyyy") }}{% endif %} wurde an Sie eine einmalige Auszahlung überwiesen. Diese Überweisung enthielt im Überweisungszweck einen Bestätigungscode. Bitte tragen Sie diesen in Ihrem Restaurant Portal unter dem Menüpunkt "Mein Restaurant", dann "Rechnungsadresse" unten ein, um Ihr Kundenkonto zu bestätigen. Nach erfolgreicher Bestätigung können weitere Auszahlungen an Sie vorgenommen werden.
+						</div>
+					</div>
+				{%- endif -%}
+			{%- endif -%}
 		</div>
 		
 		{% if invoice_data.order_items and invoice_data.order_items|length > 0 %}

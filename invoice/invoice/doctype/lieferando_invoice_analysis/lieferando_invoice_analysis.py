@@ -108,6 +108,8 @@ class LieferandoInvoiceAnalysis(Document):
 			self.total_revenue = flt(invoice.total_revenue) or 0
 			self.total_orders = invoice.total_orders or 0
 			self.online_paid_amount = flt(invoice.online_paid_amount) or 0
+			# Load online_paid_orders from invoice
+			# invoice.online_paid_orders should contain the value extracted from PDF
 			self.online_paid_orders = invoice.online_paid_orders or 0
 		except (AttributeError, ValueError) as e:
 			frappe.log_error(
@@ -309,8 +311,24 @@ class LieferandoInvoiceAnalysis(Document):
 		cash_paid_amount = flt(self.cash_paid_amount) or 0
 		pending_payments = flt(self.pending_online_payments_g) or 0
 		
-		admin_fee_rate = flt(invoice.admin_fee_rate) or 0.64
-		tax_rate = flt(invoice.tax_rate) or 19.0
+		# admin_fee_rate should be extracted from PDF and stored in invoice
+		# If not available, log warning but continue with 0 (will result in management_fee = 0)
+		admin_fee_rate = flt(invoice.admin_fee_rate)
+		if not admin_fee_rate or admin_fee_rate <= 0:
+			frappe.logger().warning(
+				f"Admin Fee Rate (admin_fee_rate) is missing or invalid in Lieferando Invoice '{invoice.name}'. "
+				f"Management fee will be calculated as 0. Please ensure the PDF is properly parsed."
+			)
+			admin_fee_rate = 0
+		# tax_rate should be extracted from PDF and stored in invoice
+		# If not available, log warning but continue with default 19%
+		tax_rate = flt(invoice.tax_rate)
+		if not tax_rate or tax_rate <= 0:
+			frappe.logger().warning(
+				f"Tax Rate (tax_rate) is missing or invalid in Lieferando Invoice '{invoice.name}'. "
+				f"Using default 19%. Please ensure the PDF is properly parsed."
+			)
+			tax_rate = 19.0
 		lieferando_service_fee_rate = flt(self.service_fee_rate) or flt(invoice.service_fee_rate) or 0
 		
 		# Reference commission rate logic (from constants)
@@ -331,12 +349,21 @@ class LieferandoInvoiceAnalysis(Document):
 		# Management fee: exclude chargeback orders (iade edilen siparişler)
 		effective_online_orders = max(0, online_orders_count - chargeback_orders_count)
 		management_fee_amount = effective_online_orders * admin_fee_rate
-		# Use cash_service_fee_amount from invoice if available, otherwise calculate
+		# Use cash_service_fee_amount from invoice if available
+		# This should be extracted from PDF, not calculated
 		cash_service_fee_from_invoice = flt(getattr(invoice, 'cash_service_fee_amount', None)) or 0
 		if cash_service_fee_from_invoice > 0:
 			additional_service_fee_amount = cash_service_fee_from_invoice
 		else:
-			additional_service_fee_amount = cash_paid_amount * 0.0195
+			# If cash_service_fee_amount is not available and cash_paid_amount > 0, 
+			# log warning but continue with 0
+			if cash_paid_amount > 0:
+				frappe.logger().warning(
+					f"Cash Service Fee Amount (cash_service_fee_amount) is missing in Lieferando Invoice '{invoice.name}' "
+					f"but cash_paid_amount is {cash_paid_amount}. "
+					f"Additional service fee will be 0. Please ensure the PDF is properly parsed."
+				)
+			additional_service_fee_amount = 0
 		
 		# Culinary Account Fee (editable, default from constants)
 		# Preserve user's input (including 0), only use default if field is empty/None
