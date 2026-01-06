@@ -281,6 +281,8 @@ def create_lieferando_invoice_doc(communication_doc, pdf_attachment, extracted_d
         "cash_service_fee_amount": extracted_data.get("cash_service_fee_amount") or 0,
         "chargeback_orders": extracted_data.get("chargeback_orders") or 0,
         "chargeback_amount": extracted_data.get("chargeback_amount") or 0,
+        "stamp_card_orders": extracted_data.get("stamp_card_orders") or 0,
+        "stamp_card_amount": extracted_data.get("stamp_card_amount") or 0,
         "ausstehende_am_datum": extracted_data.get("invoice_date"),
         "ausstehende_onlinebezahlungen_betrag": extracted_data.get("outstanding_balance") or 0,
         "rechnungsausgleich_betrag": extracted_data.get("total_amount") or 0,
@@ -959,17 +961,26 @@ def extract_lieferando_fields(full_text: str) -> dict:
         pass
 
     # Trinkgelder - Tip Items (PAGE 3) (opsiyonel)
-    # Eğer PDF'de "Trinkgelder" tablosu varsa: "Datum # €" başlığından sonra benzer satırlar gelir.
+    # Eğer PDF'de "Trinkgelder" tablosu varsa: "Trinkgelder erhalten von" satırından sonra "Datum # €" başlığı gelir.
     try:
         tip_items = []
         lines = (full_text or "").splitlines()
         tips_start = None
+        # "Trinkgelder erhalten von" satırını bul (bahşiş tablosu başlığı)
         for i, line in enumerate(lines):
-            if "Trinkgelder" in (line or ""):
+            if "Trinkgelder erhalten von" in (line or ""):
                 tips_start = i
                 break
+        # Eğer "Trinkgelder erhalten von" bulunamazsa, "Trinkgelder" içeren herhangi bir satırı ara
+        if tips_start is None:
+            for i, line in enumerate(lines):
+                if "Trinkgelder" in (line or "") and "erhalten von" in (line or ""):
+                    tips_start = i
+                    break
+        
         if tips_start is not None:
             header_idx = None
+            # "Trinkgelder erhalten von" satırından sonra "Datum # €" başlığını ara
             for j in range(tips_start, len(lines)):
                 if (lines[j] or "").strip() == "Datum # €":
                     header_idx = j
@@ -1078,6 +1089,30 @@ def extract_lieferando_fields(full_text: str) -> dict:
                 msg = re.sub(r'\s+', ' ', msg)
                 if msg:
                     data["confirmation_code_message"] = msg[:255]
+    except Exception:
+        pass
+    
+    # Stempelkarte (Stamp Card / Loyalty Program) extraction
+    # Pattern: "davon mit Stempelkarte bezahlt **: 1 Bestellung im Wert von € 12,69"
+    try:
+        stamp_card_patterns = [
+            r'davon mit Stempelkarte bezahlt\s*\*\*\s*:\s*(\d+)\s+Bestellung[^€]*€\s*([\d,\.]+)',  # With colon
+            r'davon mit Stempelkarte bezahlt\s*\*\*\s+(\d+)\s+Bestellung[^€]*€\s*([\d,\.]+)',  # Without colon
+            r'Stempelkarte bezahlt\s*\*\*\s*:\s*(\d+)\s+Bestellung[^€]*€\s*([\d,\.]+)',  # Alternative format
+        ]
+        
+        for pattern in stamp_card_patterns:
+            stamp_card_match = re.search(pattern, full_text, re.IGNORECASE)
+            if stamp_card_match:
+                try:
+                    orders = int(stamp_card_match.group(1))
+                    amount = parse_decimal(stamp_card_match.group(2))
+                    if amount is not None:
+                        data["stamp_card_orders"] = orders
+                        data["stamp_card_amount"] = amount
+                        break
+                except (ValueError, IndexError):
+                    continue
     except Exception:
         pass
     
@@ -1887,16 +1922,19 @@ def generate_and_attach_analysis_pdf(analysis_name):
         # Analysis dokümanını kontrol et
         if not frappe.db.exists(DOCTYPE_LIEFERANDO_INVOICE_ANALYSIS, analysis_name):
             frappe.throw(_("Lieferando Invoice Analysis bulunamadı: {0}").format(analysis_name))
-        
+
         analysis_doc = frappe.get_doc(DOCTYPE_LIEFERANDO_INVOICE_ANALYSIS, analysis_name)
-        print_format = "Lieferando Invoice Analysis Format"
-        
+        # Özel, wkhtmltopdf-dostu HTML/CSS kullanan print format
+        # (tablolar ve basit stillerle Lieferando PDF'ine yakın çıktı verir)
+        print_format = "Lieferando Invoice Analysis Format 2"
+
         # Print permission kontrolü (download_pdf endpoint'i ile aynı)
         validate_print_permission(analysis_doc)
-        
+
         # PDF oluştur - download_pdf endpoint'i ile AYNI süreç
         # download_pdf endpoint'i: frappe.utils.print_format.download_pdf
-        # Bu endpoint frappe.get_print kullanır
+        # Bu endpoint frappe.get_print kullanır; pdf_generator parametresi
+        # geçirilmediği için Frappe varsayılan wkhtmltopdf motorunu kullanır.
         with print_language(None):
             pdf_data = frappe.get_print(
                 doctype=DOCTYPE_LIEFERANDO_INVOICE_ANALYSIS,
@@ -1904,7 +1942,7 @@ def generate_and_attach_analysis_pdf(analysis_name):
                 print_format=print_format,
                 doc=analysis_doc,
                 as_pdf=True,
-                no_letterhead=1
+                no_letterhead=1,
             )
         
         # Dosya adı oluştur (download_pdf ile aynı format)

@@ -197,7 +197,7 @@ app_license = "mit"
 
 # ignore_links_on_delete = ["Communication", "ToDo"]
 
-# Request Events
+ # Request Events
 # ----------------
 # before_request = ["invoice.utils.before_request"]
 # after_request = ["invoice.utils.after_request"]
@@ -231,7 +231,7 @@ app_license = "mit"
 # 	}
 # ]
 
-# Authentication and authorization
+ # Authentication and authorization
 # --------------------------------
 
 # auth_hooks = [
@@ -241,9 +241,9 @@ app_license = "mit"
 # Automatically update python controller files with type annotations for this app.
 # export_python_type_annotations = True
 
-# default_log_clearing_doctypes = {
-# 	"Logging DocType Name": 30  # days to retain logs
-# }
+ # default_log_clearing_doctypes = {
+ # 	"Logging DocType Name": 30  # days to retain logs
+ # }
 
 doc_events = {
 	"Communication": {
@@ -252,21 +252,8 @@ doc_events = {
 	}
 }
 
-# PDF Override - sadece get_pdf override (CSS inline için gerekli)
-# get_print override kaldırıldı - Frappe'nin standart get_print kullanılıyor
-boot_session = [
-	"invoice.custom_pdf.boot_session_with_patch"
-]
-before_request = [
-	"invoice.custom_pdf.patch_pdf_functions",
-	"invoice.weasyprint_override.apply_weasyprint_override",
-	"invoice.chrome_pdf.override_weasyprint_download_pdf"
-]
-
-# Chrome PDF Generator Hook
-pdf_generator = [
-	"invoice.chrome_pdf.chrome_pdf_generator"
-]
+# Use Chrome-based PDF generator when a Print Format has pdf_generator == "chrome"
+pdf_generator = ["invoice.chrome_pdf.chrome_pdf_generator"]
 
 # Scheduled Tasks
 # ---------------

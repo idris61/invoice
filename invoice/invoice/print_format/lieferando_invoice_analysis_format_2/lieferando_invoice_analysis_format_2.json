@@ -1,7 +1,6 @@
 {
  "absolute_value": 0,
  "align_labels_right": 0,
- "creation": "2025-12-30 20:00:00",
  "custom_format": 1,
  "default_print_language": "de",
  "disabled": 0,
@@ -16,12 +15,9 @@
  "margin_left": 0.0,
  "margin_right": 0.0,
  "margin_top": 0.0,
- "modified": "2026-01-01 21:01:26.476150",
- "modified_by": "cullinary@gmail.com",
  "module": "invoice",
- "name": "Lieferando Invoice Analysis Format",
+ "name": "Lieferando Invoice Analysis Format 2",
  "owner": "Administrator",
- "pdf_generator": "chrome",
  "print_format_builder": 0,
  "print_format_builder_beta": 0,
  "print_format_for": "DocType",
@@ -30,3 +26,5 @@
  "show_section_headings": 0,
  "standard": "No"
 }
+
+

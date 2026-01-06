@@ -80,9 +80,9 @@ frappe.ui.form.on('Lieferando Invoice Analysis', {
 		if (!frm.is_new()) {
 			frm.add_custom_button(__("PDF Oluştur ve Ekle"), function() {
 				frappe.call({
-					method: "invoice.api.invoice_email_handler.generate_and_attach_analysis_pdf",
+					method: "invoice.api.pdf.generate_and_attach_modern_pdf",
 					args: {
-						analysis_name: frm.doc.name
+						docname: frm.doc.name
 					},
 					freeze: true,
 					freeze_message: __("PDF oluşturuluyor..."),

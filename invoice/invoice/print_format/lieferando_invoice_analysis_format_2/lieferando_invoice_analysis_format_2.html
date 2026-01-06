@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+	<meta charset="UTF-8">
+	<title>Lieferando Invoice Analysis - {{ doc.invoice_number }}</title>
+	<style>
+		@page {
+			size: A4;
+			/* İçerik alanını koru, footer'ı sabit altta göstereceğiz */
+			margin: 8mm 12mm 18mm 12mm;
+		}
+
+	body {
+		font-family: Arial, sans-serif;
+		font-size: 11pt;
+		/* Satır aralığını sıkılaştır – wkhtmltopdf ile uyumlu, sadece temel line-height */
+		line-height: 1.15;
+		color: #000;
+		margin: 0;
+		padding: 0;
+		background: #fff;
+	}
+
+		.page {
+			page-break-after: always;
+		}
+		.page.last {
+			page-break-after: avoid;
+		}
+
+		/* BASİT TABLO TABANLI LAYOUT – wkhtmltopdf UYUMLU */
+
+		table {
+			border-collapse: collapse;
+			width: 100%;
+		}
+
+		/* Başlık ve logo bloğu – daha kompakt */
+		.header-main {
+			margin-bottom: 6mm;
+		}
+		.header-main td {
+			vertical-align: top;
+		}
+		.invoice-title {
+			font-size: 17pt;
+			font-weight: 600;
+			padding-bottom: 4mm;
+		}
+		.logo-cell {
+			text-align: right;
+		}
+		.logo-img {
+			max-width: 155px;
+			max-height: 55px;
+		}
+
+/* Kundennummer / Datum / Rechnungsnummer bloğu */
+.info-table {
+	margin-top: 2mm;
+	margin-bottom: 3mm;
+}
+.info-table td {
+	/* Satırlar arası boşluğu tamamen minimize et */
+	padding: 0;
+	line-height: 1;
+	vertical-align: top;
+}
+
+.info-label {
+	padding-right: 2mm;
+	white-space: nowrap;
+}
+
+/* Kundennummer + Datum bloğunu tek hücrede, satır aralığı çok sık olacak şekilde tut */
+.info-block div {
+	margin: 0;
+	padding: 0;
+	line-height: 1;
+}
+
+.section-title {
+	margin-top: 2mm;
+	margin-bottom: 1mm;
+	font-weight: bold;
+}
+
+		hr {
+			border: none;
+			border-top: 1px solid #000;
+			margin: 1mm 0 2mm 0;
+		}
+
+	.services-table td,
+	.amounts-table td {
+		/* Satır aralarını minimuma indir - wkhtmltopdf uyumlu */
+		padding: 0;
+		line-height: 1.1;
+		vertical-align: top;
+	}
+
+	/* Toplam ve hizmet satırlarında kolon genişlikleri –
+	   € ve değer kolonunu hizalamak için basit yüzde dağılımı */
+	.col-desc {
+		width: 72%;
+	}
+	.col-euro {
+		width: 5%;
+		text-align: right;
+		padding-right: 1mm;
+	}
+	.col-val {
+		width: 23%;
+		text-align: right;
+	}
+
+		/* 1. sayfadaki Servicegebühr ve Culinary Kontogebühr satırlarını hafifçe içerden başlat (referans PDF gibi) */
+		.indent-1 { padding-left: 6mm; }
+		.indent-2 { padding-left: 10mm; }
+
+		.bold { font-weight: bold; }
+
+		/* Footer'ı sayfanın altına sabitle (wkhtmltopdf destekler) */
+		.footer {
+			position: fixed;
+			bottom: 8mm;
+			left: 12mm;
+			right: 12mm;
+			border-top: 1px solid #000;
+			font-size: 8.5pt;
+			padding-top: 3mm;
+		}
+		.footer td {
+			vertical-align: top;
+			padding-top: 1px;
+		}
+		.footer-name {
+			font-weight: bold;
+			margin-bottom: 2mm;
+			font-size: 9pt;
+		}
+
+		/* PAGE 2 */
+		.summary-table td { padding: 1px 0; }
+		.payout-table td { padding: 1px 0; }
+
+		/* 2. sayfadaki sipariş tablosu – daha sık ve sola yaslı */
+		.orders-table {
+			font-size: 9pt;
+			margin-top: 3mm;
+			width: auto;          /* sağdaki boşluğu azalt */
+			margin-left: 0;       /* tamamen sola yasla */
+		}
+		.orders-table th,
+		.orders-table td {
+			padding: 0 2px;
+			white-space: nowrap;
+			line-height: 1.1;
+		}
+		.orders-table th { font-weight: bold; text-align: left; }
+		.orders-table td:last-child { text-align: right; }
+
+		.footnote {
+			margin-top: 4mm;
+			padding-top: 2mm;
+			border-top: 1px solid #000;
+			font-size: 8.5pt;
+		}
+	</style>
+</head>
+<body>
+
+{%- macro format_currency(amount) -%}
+	{%- if amount -%}
+		{%- set formatted = "{:,.2f}".format(amount) -%}
+		{{ formatted.replace(",", "X").replace(".", ",").replace("X", ".") }}
+	{%- else -%}
+		0,00
+	{%- endif -%}
+{%- endmacro -%}
+
+{%- set invoice_data = doc.invoice_data if doc.invoice_data else {} -%}
+
+<!-- SAYFA 1 -->
+<div class="page">
+	<table class="header-main">
+		<tr>
+			<td>
+				<div class="invoice-title">Rechnung</div>
+				<div>z.Hd. {{ doc.restaurant_name }}</div>
+			</td>
+			<td class="logo-cell">
+				<img src="/files/logocc.png" class="logo-img" />
+			</td>
+		</tr>
+	</table>
+
+	<table>
+		<tr>
+			<td>
+				<div>{{ invoice_data.customer_company or '' }}</div>
+				{% if invoice_data.restaurant_address %}
+					{% for line in invoice_data.restaurant_address.split('\n') %}
+						{% if line.strip() %}
+							<div>{{ line.strip() }}</div>
+						{% endif %}
+					{% endfor %}
+				{% endif %}
+			</td>
+		</tr>
+	</table>
+
+	<table class="info-table">
+		<tr>
+			<td class="info-block">
+				<div>
+					<span class="info-label">Kundennummer:</span>
+					<span>{{ doc.customer_number }}</span>
+				</div>
+				<div>
+					<span class="info-label">Datum:</span>
+					<span>
+						{% if invoice_data.invoice_date %}
+							{{ frappe.utils.format_date(invoice_data.invoice_date, "dd-MM-yyyy") }}
+						{% else %}
+							{{ frappe.utils.format_date(frappe.utils.today(), "dd-MM-yyyy") }}
+						{% endif %}
+					</span>
+				</div>
+			</td>
+			<td style="width:15mm;"></td>
+			<td style="text-align: right;" class="info-block">
+				<div>
+					<span class="info-label">Rechnungsnummer:</span>
+					<span>{{ doc.invoice_number }}</span>
+				</div>
+			</td>
+		</tr>
+	</table>
+
+	<div class="section-title">Folgende Leistungen stellen wir Ihnen in Rechnung:</div>
+	<hr />
+
+	{%- set chargeback_orders = doc.chargeback_orders|int if doc.chargeback_orders else 0 -%}
+	{%- set online_paid_orders_count = doc.online_paid_orders|int if doc.online_paid_orders else 0 -%}
+	{%- set effective_online_orders = max(0, online_paid_orders_count - chargeback_orders) -%}
+	{%- set chargeback_amount = doc.chargeback_amount|float if doc.chargeback_amount else 0.0 -%}
+	{%- set effective_online_amount = (doc.online_paid_amount|float if doc.online_paid_amount else 0.0) - chargeback_amount -%}
+
+	<table class="services-table">
+		<tr>
+			<td colspan="3" class="col-desc">
+				Lieferando.de ({{ frappe.utils.format_date(doc.period_start, "dd-MM-yyyy") }}
+				bis einschließlich {{ frappe.utils.format_date(doc.period_end, "dd-MM-yyyy") }}):
+				{{ effective_online_orders }} Bestellungen im Wert von € {{ format_currency(effective_online_amount) }}
+			</td>
+		</tr>
+		{%- set ref_rate = doc.reference_service_fee_rate|float if (doc.reference_service_fee_rate is not none and doc.reference_service_fee_rate|float > 0) else (12.0 if (not doc.service_fee_rate or doc.service_fee_rate|float <= 12.0) else 30.0) -%}
+		{%- set ref_amount = (effective_online_amount|float * ref_rate / 100) if effective_online_amount else 0.0 -%}
+		<tr>
+			<td class="col-desc indent-1">Servicegebühr: {{ "{:,.2f}".format(ref_rate).replace(".", ",") }}% von € {{ format_currency(effective_online_amount) }}</td>
+			<td class="col-euro">€</td>
+			<td class="col-val">{{ format_currency(ref_amount) }}</td>
+		</tr>
+
+		{%- set admin_fee_rate_display = invoice_data.admin_fee_rate|float if (invoice_data.admin_fee_rate is not none and invoice_data.admin_fee_rate|float > 0) else None -%}
+		{%- if admin_fee_rate_display is not none -%}
+			{%- set management_fee_calculated = admin_fee_rate_display * effective_online_orders if effective_online_orders > 0 else 0.0 -%}
+			{%- set management_fee_display = doc.management_fee|float if (doc.management_fee is not none and doc.management_fee|float > 0) else management_fee_calculated -%}
+		{%- else -%}
+			{%- set management_fee_display = doc.management_fee|float if (doc.management_fee is not none and doc.management_fee|float > 0) else 0.0 -%}
+		{%- endif -%}
+
+		{%- if effective_online_orders > 0 and management_fee_display > 0 and admin_fee_rate_display is not none -%}
+		<tr><td colspan="3" style="height:2mm;"></td></tr>
+		<tr>
+			<td colspan="3" class="col-desc">
+				Verwaltungsgebühr (Online-Zahlungen) ({{ frappe.utils.format_date(doc.period_start, "dd-MM-yyyy") }}
+				bis einschließlich {{ frappe.utils.format_date(doc.period_end, "dd-MM-yyyy") }}):
+				{{ effective_online_orders }} Bestellungen im Wert von € {{ format_currency(effective_online_amount) }}
+			</td>
+		</tr>
+		<tr>
+			<td class="col-desc indent-1">
+				Servicegebühr: € {{ format_currency(admin_fee_rate_display) }} x {{ effective_online_orders }}
+			</td>
+			<td class="col-euro">€</td>
+			<td class="col-val">{{ format_currency(management_fee_display) }}</td>
+		</tr>
+		{%- endif -%}
+
+		{% if doc.culinary_account_fee and doc.culinary_account_fee|float > 0 %}
+		<tr>
+			<td class="col-desc indent-2">Culinary Kontogebühr</td>
+			<td class="col-euro">€</td>
+			<td class="col-val">{{ format_currency(doc.culinary_account_fee) }}</td>
+		</tr>
+		{% endif %}
+	</table>
+
+	{%- set tax_rate_display = invoice_data.tax_rate|float if (invoice_data.tax_rate is not none and invoice_data.tax_rate|float > 0) else None -%}
+	{%- set displayed_subtotal = displayed_subtotal if displayed_subtotal is defined else 0.0 -%}
+	{%- set displayed_subtotal = (effective_online_amount|float * ref_rate / 100) if effective_online_amount else 0.0 -%}
+	{%- if admin_fee_rate_display is not none -%}
+		{%- set management_fee_calc = management_fee_display -%}
+	{%- else -%}
+		{%- set management_fee_calc = 0.0 -%}
+	{%- endif -%}
+	{%- if effective_online_orders > 0 and management_fee_calc > 0 and admin_fee_rate_display is not none -%}
+		{%- set displayed_subtotal = displayed_subtotal + management_fee_calc -%}
+	{%- endif -%}
+	{%- if doc.culinary_account_fee and doc.culinary_account_fee|float > 0 -%}
+		{%- set displayed_subtotal = displayed_subtotal + (doc.culinary_account_fee|float) -%}
+	{%- endif -%}
+	{%- if doc.cash_service_fee_amount and doc.cash_service_fee_amount|float > 0 -%}
+		{%- set displayed_subtotal = displayed_subtotal + (doc.cash_service_fee_amount|float) -%}
+	{%- endif -%}
+
+	<table class="amounts-table" style="margin-top:4mm;">
+		<tr>
+			<td class="col-desc">Zwischensumme</td>
+			<td class="col-euro">€</td>
+			<td class="col-val">{{ format_currency(displayed_subtotal) }}</td>
+		</tr>
+		<tr>
+			<td class="col-desc">
+				{% if tax_rate_display is not none and tax_rate_display > 0 %}
+					MwSt. ({{ "{:,.1f}".format(tax_rate_display).replace(".", ",") }}% von € {{ format_currency(displayed_subtotal) }})
+				{% else %}
+					MwSt. (Rate missing)
+				{% endif %}
+			</td>
+			<td class="col-euro">€</td>
+			<td class="col-val">
+				{%- if tax_rate_display is not none and tax_rate_display > 0 -%}
+					{%- set displayed_vat = displayed_subtotal * (tax_rate_display / 100) -%}
+					{{ format_currency(displayed_vat) }}
+				{%- else -%}
+					{{ format_currency(0) }}
+				{%- endif -%}
+			</td>
+		</tr>
+		<tr>
+			<td class="col-desc">Gesamtbetrag dieser Rechnung</td>
+			<td class="col-euro">€</td>
+			<td class="col-val">
+				{%- if tax_rate_display is not none and tax_rate_display > 0 -%}
+					{%- set displayed_total = displayed_subtotal + displayed_vat -%}
+				{%- else -%}
+					{%- set displayed_total = displayed_subtotal -%}
+				{%- endif -%}
+				{{ format_currency(displayed_total) }}
+			</td>
+		</tr>
+		<tr>
+			<td class="col-desc">Verrechnet mit eingegangenen Onlinebezahlungen</td>
+			<td class="col-euro">€</td>
+			<td class="col-val">{{ format_currency(displayed_total) }}</td>
+		</tr>
+		<tr>
+			<td class="col-desc bold">Offener Rechnungsbetrag</td>
+			<td class="col-euro bold">€</td>
+			<td class="col-val bold">{{ format_currency(0) }}</td>
+		</tr>
+	</table>
+
+	<div style="margin-top:4mm;">
+		{%- set revenue_effective_online_amount = effective_online_amount -%}
+		Ihr Umsatz in der Zeit vom {{ frappe.utils.format_date(doc.period_start, "dd-MM-yyyy") }}
+		bis einschließlich {{ frappe.utils.format_date(doc.period_end, "dd-MM-yyyy") }}:
+		€ {{ format_currency(revenue_effective_online_amount) }}.
+	</div>
+
+	<div class="footer">
+		<div class="footer-name">{{ invoice_data.supplier_name or '' }}</div>
+		<table>
+			<tr>
+				<td style="width:35%;">
+					{% if invoice_data.supplier_address %}
+						{% for line in invoice_data.supplier_address.split('\n') %}
+							{% if line.strip() %}
+								<div>{{ line.strip() }}</div>
+							{% endif %}
+						{% endfor %}
+					{% endif %}
+				</td>
+				<td style="width:25%;">
+					<div>Geschäftsführer:</div>
+					{% if invoice_data.supplier_geschäftsführer %}
+						{% for part in invoice_data.supplier_geschäftsführer.split(',') %}
+							<div>{{ part.strip() }}</div>
+						{% endfor %}
+					{% endif %}
+					<div>{{ invoice_data.supplier_email or '' }}</div>
+					<div>T: {{ invoice_data.supplier_phone or '' }}</div>
+				</td>
+				<td style="width:20%;">
+					<div>{{ invoice_data.supplier_bank_name or '' }}</div>
+					<div>IBAN: {{ invoice_data.supplier_iban or '' }}</div>
+				</td>
+				<td style="width:20%;">
+					<div>{{ invoice_data.supplier_amtsgericht or '' }}</div>
+					<div>HRB: {{ invoice_data.supplier_hrb or '' }}</div>
+					<div>USt.-IdNr.: {{ invoice_data.supplier_ust_idnr or '' }}</div>
+				</td>
+			</tr>
+		</table>
+	</div>
+</div>
+
+<!-- SAYFA 2 -->
+<div class="page last">
+	<table class="header-main">
+		<tr>
+			<td>
+				<div style="font-size:17pt;font-weight:700;margin-bottom:4mm;">Einzelauflistung</div>
+				<div>Restaurant: {{ doc.restaurant_name }} ({{ doc.customer_number }})</div>
+				<div>Zeitraum: {{ frappe.utils.format_date(doc.period_start, "dd-MM-yyyy") }} bis einschl. {{ frappe.utils.format_date(doc.period_end, "dd-MM-yyyy") }}</div>
+			</td>
+			<td class="logo-cell">
+				<img src="/files/logocc.png" class="logo-img" />
+			</td>
+		</tr>
+	</table>
+
+	{%- set summary_chargeback_orders = doc.chargeback_orders|int if doc.chargeback_orders else 0 -%}
+	{%- set summary_online_paid_orders = doc.online_paid_orders|int if doc.online_paid_orders else 0 -%}
+	{%- set summary_effective_online_orders = max(0, summary_online_paid_orders - summary_chargeback_orders) -%}
+	{%- set summary_chargeback_amount = doc.chargeback_amount|float if doc.chargeback_amount else 0.0 -%}
+	{%- set summary_effective_online_amount = (doc.online_paid_amount|float if doc.online_paid_amount else 0.0) - summary_chargeback_amount -%}
+
+	<table class="summary-table" style="margin-bottom:4mm;">
+		<tr>
+			<td style="width:35%;">Gesamt</td>
+			<td>{{ summary_effective_online_orders }} Bestellungen im Wert von € {{ format_currency(summary_effective_online_amount) }}</td>
+		</tr>
+		{% if doc.cash_paid_orders and doc.cash_paid_orders > 0 %}
+		<tr>
+			<td>Bei Auslieferung bezahlt</td>
+			<td>{{ doc.cash_paid_orders }} Bestellungen im Wert von € {{ format_currency(doc.cash_paid_amount) }}</td>
+		</tr>
+		{% endif %}
+		<tr>
+			<td>Online bezahlt *</td>
+			<td>{{ summary_effective_online_orders }} Bestellungen im Wert von € {{ format_currency(summary_effective_online_amount) }}</td>
+		</tr>
+		{% if summary_chargeback_orders > 0 and summary_chargeback_amount > 0 %}
+		<tr>
+			<td>Rückbuchung</td>
+			<td>{{ summary_chargeback_orders }} Bestellungen im Wert von € {{ format_currency(summary_chargeback_amount) }}</td>
+		</tr>
+		{% endif %}
+	</table>
+
+	<hr />
+
+	<table class="payout-table" style="margin-top:3mm;margin-bottom:4mm;">
+		<tr>
+			<td class="col-desc">Ausstehende Onlinebezahlungen am {% if invoice_data.invoice_date %}{{ frappe.utils.format_date(invoice_data.invoice_date, "dd-MM-yyyy") }}{% else %}{{ frappe.utils.format_date(frappe.utils.today(), "dd-MM-yyyy") }}{% endif %} **</td>
+			<td class="col-euro">€</td>
+			<td class="col-val">{{ format_currency(doc.pending_online_payments_g) }}</td>
+		</tr>
+		<tr>
+			<td class="col-desc">Rechnungsausgleich {{ doc.invoice_number }}</td>
+			<td class="col-euro">€</td>
+			<td class="col-val">{{ format_currency(displayed_total) }}</td>
+		</tr>
+	</table>
+
+	{% if invoice_data.order_items and invoice_data.order_items|length > 0 %}
+	<table class="orders-table">
+		<thead>
+			<tr>
+				<th>Datum</th>
+				<th>#</th>
+				<th>€</th>
+			</tr>
+		</thead>
+		<tbody>
+			{% for item in invoice_data.order_items %}
+			<tr>
+				<td>{{ frappe.utils.format_datetime(item.order_date, "dd-MM-yyyy, HH:mm:ss") if item.order_date else '' }}</td>
+				<td>{{ item.order_id }}</td>
+				<td>{{ format_currency(item.amount) }}</td>
+			</tr>
+			{% endfor %}
+		</tbody>
+	</table>
+	{% endif %}
+
+	<div class="footnote">
+		** Der ausstehende Kontostand besteht aus sämtlichen erhaltenen Onlinezahlungen abzüglich der Rückerstattungen,
+		Einzahlungen für den Ausgleich von Rechnungen, sowie Auszahlungen. Diese Informationen finden Sie unter
+		https://restaurants.takeaway.com/
+	</div>
+</div>
+
+</body>
+</html>
+

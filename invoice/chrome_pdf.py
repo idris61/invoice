@@ -1,210 +1,132 @@
-# -*- coding: utf-8 -*-
-# Copyright (c) 2025, Invoice
-# Chrome PDF Generator - Headless Chrome kullanarak PDF oluşturma
-# Print format HTML'ini birebir PDF'e çevirir
+from __future__ import annotations
 
-import frappe
-from frappe import _
+"""
+Custom PDF generator hook that uses Chrome's print-to-PDF engine.
+
+This is wired via the `pdf_generator` hook in `hooks.py`.
+When a Print Format has pdf_generator == "chrome", Frappe will call this
+function instead of the default wkhtmltopdf-based implementation.
+"""
+
 import os
+import shlex
+import subprocess
 import tempfile
 from pathlib import Path
+from typing import Any
+
+import frappe
 
 
-# Override'ın uygulanıp uygulanmadığını takip et
-_override_applied = False
+def _find_chrome_binary() -> str:
+	"""Best-effort lookup for a Chrome/Chromium binary on Linux."""
 
-def override_weasyprint_download_pdf():
-	"""WeasyPrint download_pdf endpoint'ini override et - Chrome PDF generator kullan"""
-	global _override_applied
-	
-	# Eğer zaten override edilmişse, tekrar etme
-	if _override_applied:
-		return
-	
-	# Log'u hem console'a hem de file'a yaz
-	print("🔧 override_weasyprint_download_pdf called")
-	frappe.logger("invoice").info("🔧 override_weasyprint_download_pdf called")
-	
-	try:
-		from frappe.utils.weasyprint import download_pdf as original_weasyprint_download_pdf
-		from frappe.utils.print_format import download_pdf as original_print_format_download_pdf
-	except Exception as e:
-		frappe.logger("invoice").error(f"Failed to import download_pdf functions: {e}", exc_info=True)
-		return
-	
-	def weasyprint_download_pdf_override(doctype, name, print_format, letterhead=None):
-		"""Chrome PDF generator kullanarak PDF oluştur"""
-		frappe.logger("invoice").info(f"🔧 weasyprint_download_pdf_override called: doctype={doctype}, name={name}, print_format={print_format}")
-		# Print format'ı kontrol et
+	candidates = [
+		os.environ.get("CHROME_PATH"),
+		"google-chrome",
+		"google-chrome-stable",
+		"chromium",
+		"chromium-browser",
+	]
+
+	for cmd in candidates:
+		if not cmd:
+			continue
 		try:
-			pf = frappe.get_doc("Print Format", print_format)
-			frappe.logger("invoice").info(f"🔧 Print format pdf_generator: {pf.pdf_generator}")
-		except Exception as e:
-			frappe.logger("invoice").error(f"Failed to get print format: {e}", exc_info=True)
-			return original_weasyprint_download_pdf(doctype, name, print_format, letterhead)
-		
-		# Eğer pdf_generator chrome ise, Chrome PDF generator kullan
-		if pf.pdf_generator == "chrome":
-			frappe.logger("invoice").info(f"🔧 Using Chrome PDF generator for print format: {print_format}")
-			# HTML'i al
-			from frappe.utils.weasyprint import get_html
-			html = get_html(doctype, name, print_format, letterhead)
-			
-			# Chrome PDF generator ile PDF oluştur
-			pdf_bytes = chrome_pdf_generator(
-				print_format=print_format,
-				html=html,
-				options=None,
-				output=None,
-				pdf_generator="chrome"
+			subprocess.run(
+				[cmd, "--version"],
+				check=False,
+				stdout=subprocess.DEVNULL,
+				stderr=subprocess.DEVNULL,
 			)
-			
-			# Response'u ayarla
-			frappe.local.response.filename = "{name}.pdf".format(name=name.replace(" ", "-").replace("/", "-"))
-			frappe.local.response.filecontent = pdf_bytes
-			frappe.local.response.type = "pdf"
-			return
-		
-		# Değilse, orijinal WeasyPrint'i kullan
-		return original_weasyprint_download_pdf(doctype, name, print_format, letterhead)
-	
-	def print_format_download_pdf_override(doctype, name, format=None, doc=None, no_letterhead=0, language=None, letterhead=None, pdf_generator=None):
-		"""Print Format download_pdf endpoint'ini override et - Chrome PDF generator kullan"""
-		# Print format'tan pdf_generator'ı al
-		if format and not pdf_generator:
-			try:
-				pf = frappe.get_doc("Print Format", format)
-				if pf.pdf_generator == "chrome":
-					pdf_generator = "chrome"
-			except Exception as e:
-				frappe.logger("invoice").warning(f"Failed to get print format pdf_generator: {e}")
-		
-		# pdf_generator chrome ise, Chrome PDF generator kullan
-		if pdf_generator == "chrome":
-			frappe.logger("invoice").info(f"🔧 Using Chrome PDF generator for print format: {format}")
-			# HTML'i al
-			from frappe.www.printview import get_rendered_template
-			doc_obj = doc or frappe.get_doc(doctype, name)
-			if format:
-				pf = frappe.get_doc("Print Format", format)
-			else:
-				pf = None
-			html = get_rendered_template(
-				doc_obj,
-				print_format=pf,
-				no_letterhead=no_letterhead,
-				letterhead=letterhead
-			)
-			
-			# Chrome PDF generator ile PDF oluştur
-			pdf_bytes = chrome_pdf_generator(
-				print_format=format,
-				html=html,
-				options=None,
-				output=None,
-				pdf_generator="chrome"
-			)
-			
-			# Response'u ayarla
-			frappe.local.response.filename = "{name}.pdf".format(name=name.replace(" ", "-").replace("/", "-"))
-			frappe.local.response.filecontent = pdf_bytes
-			frappe.local.response.type = "pdf"
-			return
-		
-		# Değilse, orijinal print_format download_pdf'i kullan
-		return original_print_format_download_pdf(doctype, name, format, doc, no_letterhead, language, letterhead, pdf_generator)
-	
-	# Decorator'ları uygula
-	weasyprint_download_pdf_override = frappe.whitelist()(weasyprint_download_pdf_override)
-	print_format_download_pdf_override = frappe.whitelist(allow_guest=True)(print_format_download_pdf_override)
-	
-	# Override'ları uygula
-	frappe.utils.weasyprint.download_pdf = weasyprint_download_pdf_override
-	frappe.utils.print_format.download_pdf = print_format_download_pdf_override
-	_override_applied = True
-	frappe.logger("invoice").info("✅ PDF download endpoints override applied - Chrome PDF generator will be used when pdf_generator=chrome")
+		except FileNotFoundError:
+			continue
+		else:
+			return cmd
+
+	# Fallback – let it fail clearly later
+	return "google-chrome"
 
 
-def chrome_pdf_generator(print_format=None, html=None, options=None, output=None, pdf_generator=None):
+def chrome_pdf_generator(
+	*,
+	print_format: str,
+	html: str,
+	options: dict[str, Any] | None = None,
+	output=None,
+	pdf_generator: str | None = None,
+) -> bytes | None:
 	"""
-	Chrome PDF Generator Hook Fonksiyonu
-	Headless Chrome kullanarak PDF oluşturur
+	Hook function for Frappe's `pdf_generator` mechanism.
+
+	Args:
+	    print_format: Print Format name (unused, but part of the hook signature)
+	    html: Rendered HTML to convert
+	    options: wkhtmltopdf-style options (currently ignored)
+	    output: Optional PdfWriter – unsupported for Chrome, so we ignore and
+	            return raw bytes.
+	    pdf_generator: Name of the requested PDF generator; we only handle "chrome".
+
+	Returns:
+	    PDF bytes, or None to let Frappe fall back to the default behaviour.
 	"""
+
+	# Only handle explicit chrome requests; otherwise let Frappe fall back.
 	if pdf_generator != "chrome":
 		return None
-	
-	try:
-		from playwright.sync_api import sync_playwright
-	except ImportError:
-		frappe.logger("invoice").error("Playwright not installed. Install with: pip install playwright && playwright install chromium")
-		raise frappe.ValidationError(_("Playwright not installed. Please install it first."))
-	
-	frappe.logger("invoice").info(f"🔧 Chrome PDF Generator called for print format: {print_format}")
-	
-	# Base URL'i al
-	base_url = frappe.utils.get_url()
-	
-	# Playwright ile PDF oluştur
-	with sync_playwright() as p:
-		# Chromium browser'ı başlat
-		browser = p.chromium.launch(headless=True)
-		
-		# Context oluştur ve base URL'i ayarla
-		context = browser.new_context(base_url=base_url)
-		page = context.new_page()
-		
-		# HTML'i doğrudan set_content ile yükle
-		# Base URL context'te ayarlandığı için CSS ve image'lar çalışacak
-		page.set_content(html, wait_until="networkidle")
-		
-		# PDF seçeneklerini hazırla
-		pdf_options = {
-			"format": "A4",
-			"print_background": True,
-			"margin": {
-				"top": "0mm",
-				"right": "0mm",
-				"bottom": "0mm",
-				"left": "0mm"
-			}
-		}
-		
-		# Print format'tan margin ayarlarını al
-		if print_format:
-			try:
-				pf = frappe.get_doc("Print Format", print_format)
-				if pf.margin_top:
-					pdf_options["margin"]["top"] = f"{pf.margin_top}mm"
-				if pf.margin_right:
-					pdf_options["margin"]["right"] = f"{pf.margin_right}mm"
-				if pf.margin_bottom:
-					pdf_options["margin"]["bottom"] = f"{pf.margin_bottom}mm"
-				if pf.margin_left:
-					pdf_options["margin"]["left"] = f"{pf.margin_left}mm"
-				
-				# Page size ayarı
-				print_settings = frappe.get_doc("Print Settings")
-				if print_settings.pdf_page_size:
-					pdf_options["format"] = print_settings.pdf_page_size
-			except Exception as e:
-				frappe.logger("invoice").warning(f"Failed to get print format settings: {e}")
-		
-		# PDF oluştur
-		pdf_bytes = page.pdf(**pdf_options)
-		
-		# Browser'ı kapat
-		browser.close()
-	
-	frappe.logger("invoice").info("✅ Chrome PDF generated successfully")
-	
-	# Output varsa, PDF'i output'a ekle
-	if output:
-		from pypdf import PdfReader
-		from io import BytesIO
-		reader = PdfReader(BytesIO(pdf_bytes))
-		output.append_pages_from_reader(reader)
-		return output
-	
-	# PDF bytes'ı döndür
-	return pdf_bytes
+
+	chrome_bin = _find_chrome_binary()
+
+	# Write HTML to a temporary file so Chrome can open it.
+	with tempfile.TemporaryDirectory() as tmpdir:
+		tmpdir_path = Path(tmpdir)
+		html_path = tmpdir_path / "document.html"
+		pdf_path = tmpdir_path / "document.pdf"
+
+		html_path.write_text(html, encoding="utf-8")
+
+		# Build Chrome headless command.
+		# NOTE: `--no-sandbox` is often required under containers / WSL.
+		cmd = [
+			chrome_bin,
+			"--headless",
+			"--disable-gpu",
+			"--no-sandbox",
+			"--print-to-pdf-no-header",
+			f"--print-to-pdf={pdf_path}",
+			str(html_path),
+		]
+
+		try:
+			proc = subprocess.run(
+				cmd,
+				check=False,
+				stdout=subprocess.PIPE,
+				stderr=subprocess.PIPE,
+				text=True,
+			)
+		except FileNotFoundError as exc:
+			frappe.log_error(
+				title="Chrome PDF Generator - binary not found",
+				message=f"Command: {shlex.join(cmd)}\nError: {exc}",
+			)
+			return None
+
+		if proc.returncode != 0 or not pdf_path.exists():
+			frappe.log_error(
+				title="Chrome PDF Generator - conversion failed",
+				message=(
+					f"Command: {shlex.join(cmd)}\n"
+					f"Return code: {proc.returncode}\n"
+					f"STDOUT:\n{proc.stdout}\n\nSTDERR:\n{proc.stderr}"
+				),
+			)
+			return None
+
+		pdf_bytes = pdf_path.read_bytes()
+
+		# Frappe's print_utils expects raw bytes when using custom generators.
+		return pdf_bytes
+
+
 

@@ -13,7 +13,8 @@
 		body {
 			font-family: Arial, sans-serif;
 			font-size: 11pt;
-			line-height: 1.4;
+			/* Lieferando PDF'ine daha yakın, daha sık satır aralığı */
+			line-height: 1.25;
 			color: #000;
 			margin: 0;
 			padding: 0;
@@ -102,13 +103,15 @@
 		
 		/* Invoice Details */
 		.invoice-details {
-			margin-bottom: 16px;
+			/* Orijinal Lieferando PDF'ine daha yakın, daha kompakt blok */
+			margin-top: 4px;
+			margin-bottom: 10px;
 			font-size: 11pt;
 		}
 		
 		.invoice-details-row {
-			margin-bottom: 4px;
-			line-height: 1.5;
+			margin-bottom: 2px;
+			line-height: 1.25;
 		}
 		
 		.invoice-details-label {
@@ -123,8 +126,8 @@
 		.invoice-details-inline {
 			display: grid;
 			grid-template-columns: 1fr 1fr;
-			margin-bottom: 4px;
-			gap: 0;
+			margin-bottom: 2px;
+			column-gap: 60px;
 		}
 		
 		.invoice-details-inline > div:first-child {

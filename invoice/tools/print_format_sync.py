@@ -24,6 +24,9 @@ def _upsert_print_format(pf_name: str, doc_type: str, module: str, html: str, ba
 	data.pop("modified", None)
 	data.pop("modified_by", None)
 	data.pop("owner", None)
+	# PDF motoru sahada her zaman wkhtmltopdf olacağı için,
+	# JSON içindeki pdf_generator alanını zorlama.
+	data.pop("pdf_generator", None)
 
 	# force important fields
 	data.update(
@@ -55,7 +58,7 @@ def _upsert_print_format(pf_name: str, doc_type: str, module: str, html: str, ba
 @frappe.whitelist()
 def sync_lieferando_print_formats_from_repo(module: str = "invoice") -> dict[str, Any]:
 	"""
-	Sync the 2 Lieferando Print Formats from repo files into the current site's DB:
+	Sync the Lieferando Print Formats from repo files into the current site's DB:
 	- apps/invoice/.../print_format/lieferando_invoice_format/*.html|*.json
 	- apps/invoice/.../print_format/lieferando_invoice_analysis_format/*.html|*.json
 	"""
